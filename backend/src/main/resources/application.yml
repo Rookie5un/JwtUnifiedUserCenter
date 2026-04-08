@@ -1,0 +1,37 @@
+spring:
+  application:
+    name: jwt-unified-user-center
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/jwt_center?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&characterEncoding=utf8
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+  jackson:
+    default-property-inclusion: non_null
+
+server:
+  port: 8080
+
+app:
+  seed-demo-data: true
+  cors:
+    allowed-origins:
+      - http://localhost:5173
+      - http://127.0.0.1:5173
+  security:
+    jwt-secret: ${JWT_SECRET:jwt-center-demo-secret-key-that-should-be-overridden}
+    access-token-minutes: 30
+    refresh-token-days: 7
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /api-docs

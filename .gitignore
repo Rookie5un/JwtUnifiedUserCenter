@@ -1,0 +1,10 @@
+backend/target/
+frontend/node_modules/
+frontend/dist/
+.m2/
+*.tsbuildinfo
+backups/*.sql
+backups/*.sql.gz
+.env
+.DS_Store
+*.docx
