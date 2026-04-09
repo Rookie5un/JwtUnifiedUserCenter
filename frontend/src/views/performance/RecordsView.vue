@@ -15,8 +15,10 @@ const dashboard = ref<DashboardResponse | null>(null)
 const loading = ref(true)
 const error = ref('')
 const activeId = ref<number | null>(null)
+const allRecordsOpen = ref(false)
 const deleteConfirmOpen = ref(false)
 const pendingDeleteRecordId = ref<number | null>(null)
+const recordPreviewLimit = 4
 
 const form = reactive({
   amount: '',
@@ -36,6 +38,9 @@ const showComposer = computed(() => showCreateComposer.value || showEditComposer
 const showLedger = computed(() => canViewLedger.value)
 const canSubmit = computed(() => (activeId.value ? canEditSelfRecord.value : canCreateRecord.value))
 const singlePanel = computed(() => showComposer.value !== showLedger.value)
+const previewRecords = computed(() => records.value.slice(0, recordPreviewLimit))
+const hiddenRecordCount = computed(() => Math.max(records.value.length - recordPreviewLimit, 0))
+const hasHiddenRecords = computed(() => hiddenRecordCount.value > 0)
 
 const canEditRecord = (record: PerformanceRecord) =>
   canEditSelfRecord.value && record.ownerId === auth.user?.id && record.status !== 'APPROVED'
@@ -54,6 +59,7 @@ function resetForm() {
 
 function editRecord(record: PerformanceRecord) {
   if (!canEditRecord(record)) return
+  allRecordsOpen.value = false
   activeId.value = record.id
   form.amount = String(record.amount)
   form.occurredOn = record.occurredOn
@@ -115,6 +121,7 @@ async function removeRecord(recordId: number) {
 }
 
 function requestRemoveRecord(recordId: number) {
+  allRecordsOpen.value = false
   pendingDeleteRecordId.value = recordId
   deleteConfirmOpen.value = true
 }
@@ -212,15 +219,33 @@ onMounted(loadData)
             <span class="eyebrow">Visible Ledger</span>
             <h3>记录流</h3>
           </div>
-          <span class="muted">{{ loading ? '载入中' : `${records.length} 条记录` }}</span>
+          <div class="panel-meta">
+            <span class="muted">{{ loading ? '载入中' : `${records.length} 条记录` }}</span>
+            <button
+              v-if="hasHiddenRecords"
+              class="button button-secondary compact"
+              type="button"
+              @click="allRecordsOpen = true"
+            >
+              查看全部
+            </button>
+          </div>
         </div>
 
         <p v-if="!canCreateRecord && canEditSelfRecord && !activeId" class="muted edit-hint">
           当前角色没有录入新业绩权限；如需修改已有记录，请在下方选择一条你自己的未审批记录。
         </p>
+        <p v-if="records.length" class="muted flow-hint">
+          {{
+            hasHiddenRecords
+              ? `默认先展示最近 ${recordPreviewLimit} 条，剩余 ${hiddenRecordCount} 条通过弹窗查看。`
+              : '当前已展示全部记录。'
+          }}
+        </p>
+        <p v-else-if="!loading" class="muted empty-copy">当前没有可显示的业绩记录。</p>
 
         <div class="ledger-list">
-          <article v-for="record in records" :key="record.id" class="ledger-card">
+          <article v-for="record in previewRecords" :key="record.id" class="ledger-card">
             <div class="ledger-main">
               <div>
                 <h4>{{ record.type }}</h4>
@@ -255,6 +280,59 @@ onMounted(loadData)
         </div>
       </section>
     </div>
+
+    <AppDialog
+      :open="allRecordsOpen"
+      title="全部记录流"
+      width="wide"
+      @close="allRecordsOpen = false"
+    >
+      <p class="muted">
+        当前可见范围内共 {{ records.length }} 条记录，完整列表保留编辑和删除入口。
+      </p>
+
+      <div v-if="records.length" class="dialog-ledger-list">
+        <article v-for="record in records" :key="record.id" class="dialog-ledger-card">
+          <div class="ledger-main">
+            <div>
+              <h4>{{ record.type }}</h4>
+              <p>{{ record.ownerName }} · {{ record.department }} · {{ formatDate(record.occurredOn) }}</p>
+            </div>
+            <div class="ledger-amount">
+              <StatusTag :status="record.status" />
+              <strong>{{ formatCurrency(record.amount) }}</strong>
+            </div>
+          </div>
+
+          <p class="ledger-note">{{ record.note || '没有额外备注。' }}</p>
+          <p v-if="record.rejectedReason" class="rejected-note">驳回原因：{{ record.rejectedReason }}</p>
+
+          <div class="ledger-actions">
+            <button
+              v-if="canEditRecord(record)"
+              class="button button-secondary"
+              type="button"
+              @click="editRecord(record)"
+            >
+              编辑
+            </button>
+            <button
+              v-if="canDeleteRecord(record)"
+              class="button button-secondary"
+              type="button"
+              @click="requestRemoveRecord(record.id)"
+            >
+              删除
+            </button>
+          </div>
+        </article>
+      </div>
+      <p v-else class="muted">当前没有可显示的业绩记录。</p>
+
+      <template #actions>
+        <button class="button button-primary" type="button" @click="allRecordsOpen = false">关闭</button>
+      </template>
+    </AppDialog>
 
     <AppDialog
       :open="deleteConfirmOpen"
@@ -343,6 +421,16 @@ onMounted(loadData)
   letter-spacing: -0.04em;
 }
 
+.panel-meta {
+  display: grid;
+  justify-items: end;
+  gap: 0.65rem;
+}
+
+.compact {
+  padding: 0.72rem 1rem;
+}
+
 .composer-form {
   display: grid;
   gap: 1rem;
@@ -360,6 +448,11 @@ onMounted(loadData)
 }
 
 .edit-hint {
+  margin: 0 0 1rem;
+}
+
+.flow-hint,
+.empty-copy {
   margin: 0 0 1rem;
 }
 
@@ -411,6 +504,18 @@ onMounted(loadData)
   margin-top: 1rem;
 }
 
+.dialog-ledger-list {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.dialog-ledger-card {
+  padding: 1rem;
+  border-radius: 22px;
+  background: rgba(255, 252, 247, 0.8);
+  border: 1px solid rgba(23, 22, 26, 0.08);
+}
+
 .error-copy {
   margin: 0;
   color: var(--danger);
@@ -430,6 +535,10 @@ onMounted(loadData)
   .records-head {
     flex-direction: column;
     align-items: start;
+  }
+
+  .panel-meta {
+    justify-items: start;
   }
 
   .two-up {

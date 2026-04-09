@@ -17,6 +17,7 @@ const loading = ref(true)
 const error = ref('')
 const allRecordsOpen = ref(false)
 const approvedAmountOpen = ref(false)
+const recordPreviewLimit = 4
 
 const availableScopes = computed(() => {
   const scopes: Array<'personal' | 'department' | 'global'> = []
@@ -78,6 +79,12 @@ const recordsForCurrentScope = computed(() => {
 })
 const approvedRecordsForCurrentScope = computed(() =>
   recordsForCurrentScope.value.filter((item) => item.status === 'APPROVED'),
+)
+const previewRecordsForCurrentScope = computed(() =>
+  recordsForCurrentScope.value.slice(0, recordPreviewLimit),
+)
+const hiddenRecordCount = computed(() =>
+  Math.max(recordsForCurrentScope.value.length - recordPreviewLimit, 0),
 )
 const spotlightRecord = computed(() => recordsForCurrentScope.value[0] ?? null)
 const scopeSummary = computed(() => ({
@@ -234,12 +241,17 @@ onMounted(loadData)
             <span class="eyebrow">Recent Ledger</span>
             <h3>最近发生的记录</h3>
           </div>
-          <button v-if="recordsForCurrentScope.length" class="button button-secondary compact" @click="allRecordsOpen = true">
+          <button
+            v-if="hiddenRecordCount"
+            class="button button-secondary compact"
+            type="button"
+            @click="allRecordsOpen = true"
+          >
             查看全部记录
           </button>
         </div>
         <div class="ledger">
-          <div v-for="item in recordsForCurrentScope.slice(0, 6)" :key="item.id" class="ledger-row">
+          <div v-for="item in previewRecordsForCurrentScope" :key="item.id" class="ledger-row">
             <div>
               <strong>{{ item.ownerName }}</strong>
               <span>{{ item.type }} · {{ formatDate(item.occurredOn) }}</span>
@@ -250,6 +262,14 @@ onMounted(loadData)
             </div>
           </div>
         </div>
+        <p v-if="recordsForCurrentScope.length" class="muted ledger-preview-note">
+          {{
+            hiddenRecordCount
+              ? `默认只展示最近 ${recordPreviewLimit} 条，剩余 ${hiddenRecordCount} 条通过弹窗查看。`
+              : '当前已展示全部记录。'
+          }}
+        </p>
+        <p v-else class="muted ledger-preview-note">当前视角下没有可显示的记录。</p>
       </section>
 
       <section class="surface focus-block fade-rise" style="animation-delay: 340ms">
@@ -307,6 +327,10 @@ onMounted(loadData)
       width="wide"
       @close="allRecordsOpen = false"
     >
+      <p class="muted">
+        当前视角下共 {{ recordsForCurrentScope.length }} 条记录，下面展示完整记录流。
+      </p>
+
       <div v-if="recordsForCurrentScope.length" class="dialog-ledger">
         <article v-for="item in recordsForCurrentScope" :key="item.id" class="dialog-ledger-row">
           <div>
@@ -567,6 +591,10 @@ onMounted(loadData)
   margin: 0;
   color: var(--ink-soft);
   line-height: 1.8;
+}
+
+.ledger-preview-note {
+  margin: 0.9rem 0 0;
 }
 
 @media (max-width: 1080px) {
