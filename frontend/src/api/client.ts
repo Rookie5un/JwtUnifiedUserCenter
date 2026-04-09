@@ -1,6 +1,7 @@
 import type { ApiEnvelope, AuthPayload } from '@/types'
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8080'
+export const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8080'
+const API_ROOT = API_BASE.endsWith('/') ? API_BASE : `${API_BASE}/`
 
 const ACCESS_TOKEN_KEY = 'atlas_access_token'
 const REFRESH_TOKEN_KEY = 'atlas_refresh_token'
@@ -23,6 +24,10 @@ export function clearTokens() {
   localStorage.removeItem(REFRESH_TOKEN_KEY)
 }
 
+export function resolveApiUrl(path: string) {
+  return new URL(path.replace(/^\//, ''), API_ROOT).toString()
+}
+
 async function rawRequest<T>(
   path: string,
   init: RequestInit = {},
@@ -37,7 +42,7 @@ async function rawRequest<T>(
     }
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(resolveApiUrl(path), {
     ...init,
     headers,
   })
@@ -59,7 +64,7 @@ async function tryRefresh() {
     throw new Error('Session expired.')
   }
   if (!refreshing) {
-    refreshing = fetch(`${API_BASE}/auth/refresh`, {
+    refreshing = fetch(resolveApiUrl('/auth/refresh'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

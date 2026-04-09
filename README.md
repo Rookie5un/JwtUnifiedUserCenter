@@ -1,17 +1,18 @@
 # Atlas ID Workspace
 
-统一用户中心与企业业绩验证系统的完整实现，包含：
+基于 RESTful API 和 JWT 的统一用户中心与企业业绩验证系统完整实现，包含：
 
-- `backend/`: Spring Boot 3 + JWT + RBAC + OpenAPI
+- `backend/`: Spring Boot 3 + RESTful API + JWT + OpenAPI
 - `frontend/`: Vue 3 + Vite 自定义高质感工作台界面
 
 ## 功能范围
 
 - 用户注册、登录、登出、刷新令牌、当前用户信息、修改密码
 - 用户管理、角色管理、权限管理、用户角色分配、角色权限分配
+- Swagger / OpenAPI 动态接口文档
 - JWT 校验与解析接口
 - 企业业绩录入、修改、删除、审批、统计、看板
-- 操作日志审计
+- 操作日志审计与前端日志查看
 
 ## 本地启动
 
@@ -67,6 +68,11 @@ npm run dev
 默认访问地址：
 
 - `http://localhost:5173`
+
+登录后可在工作台内直接访问：
+
+- `http://localhost:5173/docs`
+- `http://localhost:5173/logs`
 
 ## 演示账号
 

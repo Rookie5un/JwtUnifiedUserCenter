@@ -4,6 +4,8 @@ import AuthView from '@/views/auth/AuthView.vue'
 import OverviewView from '@/views/dashboard/OverviewView.vue'
 import RecordsView from '@/views/performance/RecordsView.vue'
 import ApprovalsView from '@/views/performance/ApprovalsView.vue'
+import ApiDocsView from '@/views/docs/ApiDocsView.vue'
+import LogsView from '@/views/logs/LogsView.vue'
 import AdminView from '@/views/admin/AdminView.vue'
 import AppShell from '@/layouts/AppShell.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -35,6 +37,18 @@ const router = createRouter({
           name: 'approvals',
           component: ApprovalsView,
           meta: { managerOnly: true },
+        },
+        {
+          path: 'docs',
+          name: 'docs',
+          component: ApiDocsView,
+          meta: { adminRoleOnly: true },
+        },
+        {
+          path: 'logs',
+          name: 'logs',
+          component: LogsView,
+          meta: { logViewOnly: true },
         },
         {
           path: 'admin',
@@ -79,6 +93,14 @@ router.beforeEach(async (to) => {
   }
 
   if (to.meta.managerOnly && !auth.canAccessApprovals) {
+    return { name: 'overview' }
+  }
+
+  if (to.meta.adminRoleOnly && !auth.isAdmin) {
+    return { name: 'overview' }
+  }
+
+  if (to.meta.logViewOnly && !auth.canViewLogs) {
     return { name: 'overview' }
   }
 

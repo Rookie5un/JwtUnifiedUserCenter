@@ -13,6 +13,8 @@ const items = computed(() => [
   { label: '总览', to: { name: 'overview' }, visible: true },
   { label: '业绩台账', to: { name: 'records' }, visible: auth.canAccessRecordsPage },
   { label: '审批队列', to: { name: 'approvals' }, visible: auth.canAccessApprovals },
+  { label: '接口文档', to: { name: 'docs' }, visible: auth.isAdmin },
+  { label: '操作日志', to: { name: 'logs' }, visible: auth.canViewLogs },
   { label: '系统管理', to: { name: 'admin' }, visible: auth.canAccessAdminConsole },
 ])
 
@@ -28,7 +30,7 @@ async function handleLogout() {
       <div class="brand fade-rise">
         <span class="eyebrow">Atlas ID</span>
         <strong>Unified Core</strong>
-        <p>认证、权限与业务验证共用一套可信工作面。</p>
+        <p>RESTful API、JWT 认证与业务验证共用一套可信工作面。</p>
       </div>
 
       <nav class="nav fade-rise" style="animation-delay: 120ms">

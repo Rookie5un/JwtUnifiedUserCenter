@@ -59,23 +59,23 @@ function fillCredential(username: string, password: string) {
     <section class="poster">
       <div class="poster-inner fade-rise">
         <span class="eyebrow">Atlas ID Workspace</span>
-        <h1 class="headline">让认证、权限与业务验证落在一处。</h1>
+        <h1 class="headline">让接口、认证与业务验证落在一处。</h1>
         <p class="poster-copy">
-          基于 JWT 与 RBAC 的统一用户中心，把登录、权限治理和业绩审批变成一套真正可运营的工作面。
+          基于 RESTful API 和 JWT 的统一用户中心，把登录、接口访问和业绩审批整合成一套可验证的工作面。
         </p>
 
         <div class="poster-strips">
           <div>
-            <span>JWT</span>
-            <strong>无状态访问链路</strong>
+            <span>RESTful API</span>
+            <strong>统一接口规范与协同边界</strong>
           </div>
           <div>
-            <span>RBAC</span>
-            <strong>角色与权限统一分发</strong>
+            <span>JWT</span>
+            <strong>无状态认证与访问链路</strong>
           </div>
           <div>
             <span>Scenario</span>
-            <strong>业绩管理与审批验证</strong>
+            <strong>统一用户中心与业绩验证</strong>
           </div>
         </div>
 
