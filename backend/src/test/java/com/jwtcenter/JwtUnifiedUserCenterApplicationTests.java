@@ -22,6 +22,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -81,6 +82,39 @@ class JwtUnifiedUserCenterApplicationTests {
     }
 
     @Test
+    void publicDepartmentCatalogShouldLoadWithoutAuthentication() throws Exception {
+        mockMvc.perform(get("/departments/public"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.length()").isNumber())
+            .andExpect(jsonPath("$.data[0].name").isNotEmpty());
+    }
+
+    @Test
+    void adminCanUpdateUsernameForManagedUser() throws Exception {
+        String accessToken = login("admin", "Admin@123");
+        UserAccount employee = userRepository.findByUsername("employee").orElseThrow();
+        String renamedUsername = "employee.renamed." + System.nanoTime();
+
+        mockMvc.perform(put("/users/" + employee.getId())
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "username": "%s",
+                      "displayName": "林初",
+                      "department": "East Sales",
+                      "email": "employee@atlas.local",
+                      "phone": "13800000002"
+                    }
+                    """.formatted(renamedUsername)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.username").value(renamedUsername));
+
+        UserAccount updatedUser = userRepository.findById(employee.getId()).orElseThrow();
+        assertThat(updatedUser.getUsername()).isEqualTo(renamedUsername);
+    }
+
+    @Test
     void employeeSubmissionCanBeApprovedByManagerAndLockedAfterApproval() throws Exception {
         String employeeToken = login("employee", "Employee@123");
         MvcResult creationResult = mockMvc.perform(post("/performance/records")
@@ -133,10 +167,57 @@ class JwtUnifiedUserCenterApplicationTests {
         mockMvc.perform(get("/performance/dashboard/global")
                 .header("Authorization", "Bearer " + accessToken))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.totalAmount").value(340000.00))
-            .andExpect(jsonPath("$.data.approvedCount").value(2))
+            .andExpect(jsonPath("$.data.totalAmount").value(436000.00))
+            .andExpect(jsonPath("$.data.approvedCount").value(3))
             .andExpect(jsonPath("$.data.pendingCount").value(1))
             .andExpect(jsonPath("$.data.rejectedCount").value(1));
+    }
+
+    @Test
+    void adminCanLogicallyDeleteUserAndRevokeTheirAccess() throws Exception {
+        String adminToken = login("admin", "Admin@123");
+        String username = "deleted.user." + System.nanoTime();
+
+        mockMvc.perform(post("/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "username": "%s",
+                      "password": "Passw0rd!",
+                      "displayName": "待删除用户",
+                      "department": "East Sales",
+                      "email": "%s@atlas.local",
+                      "phone": "13800000999"
+                    }
+                    """.formatted(username, username)))
+            .andExpect(status().isOk());
+
+        UserAccount createdUser = userRepository.findByUsername(username).orElseThrow();
+        String deletedUserToken = login(username, "Passw0rd!");
+
+        mockMvc.perform(delete("/users/" + createdUser.getId())
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk());
+
+        UserAccount deletedUser = userRepository.findById(createdUser.getId()).orElseThrow();
+        assertThat(deletedUser.getDeletedAt()).isNotNull();
+        assertThat(userRepository.findByIdAndDeletedAtIsNull(createdUser.getId())).isEmpty();
+
+        mockMvc.perform(post("/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "username": "%s",
+                      "password": "Passw0rd!"
+                    }
+                    """.formatted(username)))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
+
+        mockMvc.perform(get("/auth/me")
+                .header("Authorization", "Bearer " + deletedUserToken))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
     }
 
     @Test

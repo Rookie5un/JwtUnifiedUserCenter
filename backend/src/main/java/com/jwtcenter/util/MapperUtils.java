@@ -1,9 +1,11 @@
 package com.jwtcenter.util;
 
+import com.jwtcenter.dto.department.DepartmentResponse;
 import com.jwtcenter.dto.permission.PermissionResponse;
 import com.jwtcenter.dto.performance.PerformanceRecordResponse;
 import com.jwtcenter.dto.role.RoleResponse;
 import com.jwtcenter.dto.user.UserResponse;
+import com.jwtcenter.entity.Department;
 import com.jwtcenter.entity.Permission;
 import com.jwtcenter.entity.PerformanceRecord;
 import com.jwtcenter.entity.Role;
@@ -61,6 +63,15 @@ public final class MapperUtils {
             permission.getAction(),
             permission.getType(),
             permission.getDescription()
+        );
+    }
+
+    public static DepartmentResponse toDepartmentResponse(Department department) {
+        return new DepartmentResponse(
+            department.getId(),
+            department.getName(),
+            department.getDescription(),
+            department.getCreatedAt()
         );
     }
 

@@ -3,6 +3,7 @@ package com.jwtcenter.service;
 import com.jwtcenter.entity.Permission;
 import com.jwtcenter.entity.Role;
 import com.jwtcenter.entity.UserAccount;
+import com.jwtcenter.enums.UserStatus;
 import com.jwtcenter.exception.ApiException;
 import com.jwtcenter.repository.UserRepository;
 import com.jwtcenter.security.SecurityUtils;
@@ -23,8 +24,12 @@ public class AccessService {
         if (userId == null) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "Authentication is required.");
         }
-        return userRepository.findById(userId)
-            .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "Current user no longer exists."));
+        UserAccount user = userRepository.findByIdAndDeletedAtIsNull(userId)
+            .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "Current user is no longer available."));
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "Current user is disabled.");
+        }
+        return user;
     }
 
     public boolean hasRole(UserAccount user, String roleCode) {

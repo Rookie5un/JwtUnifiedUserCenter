@@ -161,10 +161,7 @@ public class PerformanceService {
     public DashboardResponse departmentDashboard() {
         UserAccount actor = accessService.currentUser();
         accessService.requireAnyPermission(actor, PermissionCodes.PERFORMANCE_VIEW_DEPARTMENT, PermissionCodes.PERFORMANCE_VIEW_GLOBAL);
-        List<PerformanceRecord> records = canViewGlobal(actor)
-            ? performanceRecordRepository.findAllByOrderByOccurredOnDescCreatedAtDesc()
-            : performanceRecordRepository.findByDepartmentOrderByOccurredOnDescCreatedAtDesc(actor.getDepartment());
-        return dashboard(canViewGlobal(actor) ? "global" : "department", records);
+        return dashboard("department", performanceRecordRepository.findByDepartmentOrderByOccurredOnDescCreatedAtDesc(actor.getDepartment()));
     }
 
     @Transactional(readOnly = true)
@@ -234,9 +231,7 @@ public class PerformanceService {
         return switch (scope == null ? "personal" : scope) {
             case "department" -> {
                 accessService.requireAnyPermission(actor, PermissionCodes.PERFORMANCE_VIEW_DEPARTMENT, PermissionCodes.PERFORMANCE_VIEW_GLOBAL);
-                yield canViewGlobal(actor)
-                    ? performanceRecordRepository.findAllByOrderByOccurredOnDescCreatedAtDesc()
-                    : performanceRecordRepository.findByDepartmentOrderByOccurredOnDescCreatedAtDesc(actor.getDepartment());
+                yield performanceRecordRepository.findByDepartmentOrderByOccurredOnDescCreatedAtDesc(actor.getDepartment());
             }
             case "global" -> {
                 accessService.requirePermission(actor, PermissionCodes.PERFORMANCE_VIEW_GLOBAL);

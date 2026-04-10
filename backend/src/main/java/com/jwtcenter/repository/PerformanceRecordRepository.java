@@ -12,9 +12,13 @@ public interface PerformanceRecordRepository extends JpaRepository<PerformanceRe
 
     List<PerformanceRecord> findByDepartmentOrderByOccurredOnDescCreatedAtDesc(String department);
 
+    List<PerformanceRecord> findByDepartment(String department);
+
     List<PerformanceRecord> findAllByOrderByOccurredOnDescCreatedAtDesc();
 
     List<PerformanceRecord> findByDepartmentAndStatusOrderByCreatedAtAsc(String department, PerformanceStatus status);
 
     List<PerformanceRecord> findByStatusOrderByCreatedAtAsc(PerformanceStatus status);
+
+    long countByDepartment(String department);
 }

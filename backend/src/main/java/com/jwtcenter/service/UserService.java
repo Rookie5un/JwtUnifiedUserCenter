@@ -8,7 +8,9 @@ import com.jwtcenter.dto.user.UserResponse;
 import com.jwtcenter.entity.Role;
 import com.jwtcenter.entity.UserAccount;
 import com.jwtcenter.enums.OperationResult;
+import com.jwtcenter.enums.UserStatus;
 import com.jwtcenter.exception.ApiException;
+import com.jwtcenter.repository.RefreshTokenRepository;
 import com.jwtcenter.repository.RoleRepository;
 import com.jwtcenter.repository.UserRepository;
 import com.jwtcenter.security.PermissionCodes;
@@ -18,6 +20,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -27,28 +30,34 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final AccessService accessService;
+    private final DepartmentService departmentService;
     private final OperationLogService operationLogService;
 
     public UserService(
         UserRepository userRepository,
         RoleRepository roleRepository,
+        RefreshTokenRepository refreshTokenRepository,
         PasswordEncoder passwordEncoder,
         AccessService accessService,
+        DepartmentService departmentService,
         OperationLogService operationLogService
     ) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
+        this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.accessService = accessService;
+        this.departmentService = departmentService;
         this.operationLogService = operationLogService;
     }
 
     @Transactional(readOnly = true)
     public List<UserResponse> listUsers() {
         accessService.requirePermission(accessService.currentUser(), PermissionCodes.USER_MANAGE);
-        return userRepository.findAll().stream().map(MapperUtils::toUserResponse).toList();
+        return userRepository.findAllByDeletedAtIsNullOrderByCreatedAtDesc().stream().map(MapperUtils::toUserResponse).toList();
     }
 
     @Transactional(readOnly = true)
@@ -67,6 +76,13 @@ public class UserService {
         boolean canManageUsers = accessService.hasPermission(actor, PermissionCodes.USER_MANAGE);
         if (!canManageUsers && !actor.getId().equals(userId)) {
             throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "You can only update your own profile.");
+        }
+        if (canManageUsers && !user.getUsername().equals(request.username()) && userRepository.existsByUsername(request.username())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "USERNAME_EXISTS", "Username already exists.");
+        }
+        if (canManageUsers) {
+            departmentService.requireExistingDepartment(request.department());
+            user.setUsername(request.username());
         }
         user.setDisplayName(request.displayName());
         user.setPhone(request.phone());
@@ -115,8 +131,29 @@ public class UserService {
         return MapperUtils.toUserResponse(saved);
     }
 
+    @Transactional
+    public void deleteUser(Long userId) {
+        UserAccount actor = accessService.currentUser();
+        accessService.requirePermission(actor, PermissionCodes.USER_MANAGE);
+        if (actor.getId().equals(userId)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "SELF_DELETE_FORBIDDEN", "You cannot delete your current account.");
+        }
+
+        UserAccount user = findUser(userId);
+        boolean deletingActiveAdmin = accessService.hasRole(user, "ADMIN") && user.getStatus() == UserStatus.ACTIVE;
+        if (deletingActiveAdmin && userRepository.countDistinctByRoles_CodeAndStatusAndDeletedAtIsNull("ADMIN", UserStatus.ACTIVE) <= 1) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "LAST_ADMIN_FORBIDDEN", "At least one active administrator account must remain.");
+        }
+
+        Instant deletedAt = Instant.now();
+        user.setDeletedAt(deletedAt);
+        refreshTokenRepository.findByUser(user).forEach(token -> token.setRevokedAt(deletedAt));
+        userRepository.save(user);
+        operationLogService.log(actor, "DELETE_USER", "USER", String.valueOf(userId), OperationResult.SUCCESS, "User logically deleted.");
+    }
+
     private UserAccount findUser(Long userId) {
-        return userRepository.findById(userId)
+        return userRepository.findByIdAndDeletedAtIsNull(userId)
             .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "User not found."));
     }
 }

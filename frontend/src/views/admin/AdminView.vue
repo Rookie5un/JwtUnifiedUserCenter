@@ -5,36 +5,46 @@ import { useRouter } from 'vue-router'
 import { api } from '@/api/service'
 import { formatDateTime, roleLabel } from '@/composables/format'
 import { useAuthStore } from '@/stores/auth'
-import type { OperationLog, Permission, Role, User } from '@/types'
+import type { Department, OperationLog, Permission, Role, User } from '@/types'
 import AppDialog from '@/components/AppDialog.vue'
 import StatusTag from '@/components/StatusTag.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
-const tab = ref<'users' | 'roles' | 'permissions' | 'logs'>('users')
+const tab = ref<'users' | 'departments' | 'roles' | 'permissions' | 'logs'>('users')
 const loading = ref(true)
 const error = ref('')
 
 const users = ref<User[]>([])
+const departments = ref<Department[]>([])
 const roles = ref<Role[]>([])
 const permissions = ref<Permission[]>([])
 const logs = ref<OperationLog[]>([])
 
 const selectedUserId = ref<number | null>(null)
+const selectedDepartmentId = ref<number | null>(null)
 const selectedRoleId = ref<number | null>(null)
 const selectedPermissionId = ref<number | null>(null)
 const permissionGuideOpen = ref(false)
 const statusConfirmOpen = ref(false)
+const userDeleteConfirmOpen = ref(false)
+const departmentDeleteConfirmOpen = ref(false)
 const roleDeleteConfirmOpen = ref(false)
 const permissionDeleteConfirmOpen = ref(false)
 
 const userForm = reactive({
+  username: '',
   displayName: '',
   department: '',
   email: '',
   phone: '',
   roleIds: [] as number[],
   newPassword: '',
+})
+
+const departmentForm = reactive({
+  name: '',
+  description: '',
 })
 
 const roleForm = reactive({
@@ -54,6 +64,7 @@ const permissionForm = reactive({
 })
 
 const selectedUser = computed(() => users.value.find((item) => item.id === selectedUserId.value) ?? null)
+const selectedDepartment = computed(() => departments.value.find((item) => item.id === selectedDepartmentId.value) ?? null)
 const selectedRole = computed(() => roles.value.find((item) => item.id === selectedRoleId.value) ?? null)
 const selectedPermission = computed(() => permissions.value.find((item) => item.id === selectedPermissionId.value) ?? null)
 const permissionRules = [
@@ -100,6 +111,7 @@ const permissionExamples = [
 const availableTabs = computed(() =>
   [
     { key: 'users' as const, label: '用户', visible: auth.canManageUsers },
+    { key: 'departments' as const, label: '部门', visible: auth.canManageUsers },
     { key: 'roles' as const, label: '角色', visible: auth.canManageRoles },
     { key: 'permissions' as const, label: '权限', visible: auth.canManagePermissions },
     { key: 'logs' as const, label: '日志', visible: auth.canViewLogs },
@@ -137,39 +149,50 @@ async function loadAll() {
   try {
     if (!auth.canAccessAdminConsole) {
       users.value = []
+      departments.value = []
       roles.value = []
       permissions.value = []
       logs.value = []
       return
     }
-    const [loadedUsers, loadedRoles, loadedPermissions, loadedLogs] = await Promise.all([
+    const [loadedUsers, loadedDepartments, loadedRoles, loadedPermissions, loadedLogs] = await Promise.all([
       auth.canManageUsers ? api.users() : Promise.resolve([] as User[]),
+      auth.canManageUsers ? api.departments() : Promise.resolve([] as Department[]),
       canLoadRoles.value ? api.roles() : Promise.resolve([] as Role[]),
       canLoadPermissions.value ? api.permissions() : Promise.resolve([] as Permission[]),
       auth.canViewLogs ? api.logs() : Promise.resolve([] as OperationLog[]),
     ])
     users.value = loadedUsers
+    departments.value = loadedDepartments
     roles.value = loadedRoles
     permissions.value = loadedPermissions
     logs.value = loadedLogs
 
     const matchedUser = loadedUsers.find((item) => item.id === selectedUserId.value)
+    const matchedDepartment = loadedDepartments.find((item) => item.id === selectedDepartmentId.value)
     const matchedRole = loadedRoles.find((item) => item.id === selectedRoleId.value)
     const matchedPermission = loadedPermissions.find((item) => item.id === selectedPermissionId.value)
 
     if (auth.canManageUsers) {
       if (matchedUser) hydrateUser(matchedUser)
-      else if (!selectedUserId.value && loadedUsers[0]) hydrateUser(loadedUsers[0])
+      else if (loadedUsers[0]) hydrateUser(loadedUsers[0])
+      else selectedUserId.value = null
+
+      if (matchedDepartment) hydrateDepartment(matchedDepartment)
+      else if (loadedDepartments[0]) hydrateDepartment(loadedDepartments[0])
+      else hydrateDepartment(null)
     }
 
     if (auth.canManageRoles) {
       if (matchedRole) hydrateRole(matchedRole)
-      else if (!selectedRoleId.value && loadedRoles[0]) hydrateRole(loadedRoles[0])
+      else if (loadedRoles[0]) hydrateRole(loadedRoles[0])
+      else hydrateRole(null)
     }
 
     if (auth.canManagePermissions) {
       if (matchedPermission) hydratePermission(matchedPermission)
-      else if (!selectedPermissionId.value && loadedPermissions[0]) hydratePermission(loadedPermissions[0])
+      else if (loadedPermissions[0]) hydratePermission(loadedPermissions[0])
+      else hydratePermission(null)
     }
   } catch (err) {
     error.value = err instanceof Error ? err.message : '管理数据载入失败。'
@@ -180,12 +203,19 @@ async function loadAll() {
 
 function hydrateUser(user: User) {
   selectedUserId.value = user.id
+  userForm.username = user.username
   userForm.displayName = user.displayName
   userForm.department = user.department
   userForm.email = user.email ?? ''
   userForm.phone = user.phone ?? ''
   userForm.roleIds = roles.value.filter((role) => user.roles.includes(role.code)).map((role) => role.id)
   userForm.newPassword = ''
+}
+
+function hydrateDepartment(department: Department | null) {
+  selectedDepartmentId.value = department?.id ?? null
+  departmentForm.name = department?.name ?? ''
+  departmentForm.description = department?.description ?? ''
 }
 
 function hydrateRole(role: Role | null) {
@@ -211,6 +241,7 @@ function hydratePermission(permission: Permission | null) {
 async function saveUser() {
   if (!selectedUser.value) return
   await api.updateUser(selectedUser.value.id, {
+    username: userForm.username,
     displayName: userForm.displayName,
     department: userForm.department,
     email: userForm.email,
@@ -230,6 +261,36 @@ async function toggleUserStatus() {
   const next = selectedUser.value.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE'
   await api.updateUserStatus(selectedUser.value.id, next)
   if (!(await syncCurrentSession())) return
+  await loadAll()
+}
+
+async function deleteUser() {
+  if (!selectedUser.value) return
+  await api.deleteUser(selectedUser.value.id)
+  if (!(await syncCurrentSession())) return
+  await loadAll()
+}
+
+async function saveDepartment() {
+  const payload = {
+    name: departmentForm.name,
+    description: departmentForm.description,
+  }
+
+  if (selectedDepartment.value) {
+    await api.updateDepartment(selectedDepartment.value.id, payload)
+  } else {
+    await api.createDepartment(payload)
+  }
+  if (!(await syncCurrentSession())) return
+  await loadAll()
+}
+
+async function deleteDepartment() {
+  if (!selectedDepartment.value) return
+  await api.deleteDepartment(selectedDepartment.value.id)
+  if (!(await syncCurrentSession())) return
+  hydrateDepartment(null)
   await loadAll()
 }
 
@@ -354,23 +415,40 @@ onMounted(loadAll)
             <span class="eyebrow">Editor</span>
             <h3>{{ selectedUser?.displayName || '选择一个用户' }}</h3>
           </div>
-          <button v-if="selectedUser" class="button button-secondary" @click="statusConfirmOpen = true">
-            {{ selectedUser.status === 'ACTIVE' ? '停用账户' : '启用账户' }}
-          </button>
+          <div v-if="selectedUser" class="head-actions">
+            <button class="button button-secondary" @click="statusConfirmOpen = true">
+              {{ selectedUser.status === 'ACTIVE' ? '停用账户' : '启用账户' }}
+            </button>
+            <button
+              class="button button-secondary"
+              :disabled="selectedUser.id === auth.user?.id"
+              @click="userDeleteConfirmOpen = true"
+            >
+              删除账户
+            </button>
+          </div>
         </div>
 
         <div v-if="selectedUser" class="editor-form">
           <div class="field two-up">
             <div class="field">
+              <label>用户名</label>
+              <input v-model="userForm.username" />
+            </div>
+            <div class="field">
               <label>姓名</label>
               <input v-model="userForm.displayName" />
             </div>
-            <div class="field">
-              <label>部门</label>
-              <input v-model="userForm.department" />
-            </div>
           </div>
           <div class="field two-up">
+            <div class="field">
+              <label>部门</label>
+              <select v-model="userForm.department">
+                <option v-for="department in departments" :key="department.id" :value="department.name">
+                  {{ department.name }}
+                </option>
+              </select>
+            </div>
             <div class="field">
               <label>邮箱</label>
               <input v-model="userForm.email" />
@@ -396,7 +474,66 @@ onMounted(loadAll)
             <input v-model="userForm.newPassword" type="password" placeholder="留空则不重置" />
           </div>
 
+          <p v-if="selectedUser.id === auth.user?.id" class="muted">
+            当前登录账户不能执行删除，只能由其他管理员处理。
+          </p>
+
           <button class="button button-primary" @click="saveUser">保存用户设置</button>
+        </div>
+      </section>
+    </div>
+
+    <div v-else-if="tab === 'departments'" class="admin-grid">
+      <section class="surface list-pane fade-rise" style="animation-delay: 60ms">
+        <div class="panel-head">
+          <div>
+            <span class="eyebrow">Department Catalog</span>
+            <h3>部门目录</h3>
+          </div>
+          <button class="button button-secondary" @click="hydrateDepartment(null)">新建</button>
+        </div>
+        <div class="list-stack">
+          <button
+            v-for="item in departments"
+            :key="item.id"
+            class="entity-row"
+            :class="{ active: selectedDepartment?.id === item.id }"
+            @click="hydrateDepartment(item)"
+          >
+            <div>
+              <strong>{{ item.name }}</strong>
+              <span>{{ item.description || '暂无部门说明' }}</span>
+            </div>
+          </button>
+        </div>
+      </section>
+
+      <section class="surface editor-pane fade-rise" style="animation-delay: 120ms">
+        <div class="panel-head">
+          <div>
+            <span class="eyebrow">Department Editor</span>
+            <h3>{{ selectedDepartment ? '编辑部门' : '新建部门' }}</h3>
+          </div>
+          <button
+            v-if="selectedDepartment"
+            class="button button-secondary"
+            @click="departmentDeleteConfirmOpen = true"
+          >
+            删除
+          </button>
+        </div>
+
+        <div class="editor-form">
+          <div class="field">
+            <label>部门名称</label>
+            <input v-model="departmentForm.name" placeholder="例如 West Sales" />
+          </div>
+          <div class="field">
+            <label>部门说明</label>
+            <textarea v-model="departmentForm.description" rows="4" placeholder="补充部门职责或覆盖区域"></textarea>
+          </div>
+          <p class="muted">重命名部门时，系统会同步更新该部门下的用户资料和历史业绩记录。</p>
+          <button class="button button-primary" @click="saveDepartment">保存部门</button>
         </div>
       </section>
     </div>
@@ -607,6 +744,30 @@ onMounted(loadAll)
         {{ selectedUser?.status === 'ACTIVE' ? '停用后该用户将无法继续登录和使用系统。' : '启用后该用户将恢复登录与业务访问能力。' }}
       </p>
       <strong v-if="selectedUser">{{ selectedUser.displayName }} · {{ selectedUser.username }}</strong>
+    </AppDialog>
+
+    <AppDialog
+      :open="userDeleteConfirmOpen"
+      title="确认删除账户"
+      confirm-text="删除账户"
+      tone="danger"
+      @close="userDeleteConfirmOpen = false"
+      @confirm="userDeleteConfirmOpen = false; deleteUser()"
+    >
+      <p class="muted">删除会采用逻辑删除：账号会从列表中隐藏，并立即失去登录与访问能力，但历史业绩和日志仍会保留。</p>
+      <strong v-if="selectedUser">{{ selectedUser.displayName }} · {{ selectedUser.username }}</strong>
+    </AppDialog>
+
+    <AppDialog
+      :open="departmentDeleteConfirmOpen"
+      title="确认删除部门"
+      confirm-text="删除部门"
+      tone="danger"
+      @close="departmentDeleteConfirmOpen = false"
+      @confirm="departmentDeleteConfirmOpen = false; deleteDepartment()"
+    >
+      <p class="muted">只有没有在用中的部门才能删除；如果该部门还有用户或业绩记录，系统会阻止删除。</p>
+      <strong v-if="selectedDepartment">{{ selectedDepartment.name }}</strong>
     </AppDialog>
 
     <AppDialog

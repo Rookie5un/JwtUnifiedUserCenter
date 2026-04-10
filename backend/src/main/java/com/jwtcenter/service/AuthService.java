@@ -36,6 +36,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AccessService accessService;
+    private final DepartmentService departmentService;
     private final OperationLogService operationLogService;
     private final long refreshTokenDays;
 
@@ -46,6 +47,7 @@ public class AuthService {
         PasswordEncoder passwordEncoder,
         JwtService jwtService,
         AccessService accessService,
+        DepartmentService departmentService,
         OperationLogService operationLogService,
         @Value("${app.security.refresh-token-days}") long refreshTokenDays
     ) {
@@ -55,6 +57,7 @@ public class AuthService {
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.accessService = accessService;
+        this.departmentService = departmentService;
         this.operationLogService = operationLogService;
         this.refreshTokenDays = refreshTokenDays;
     }
@@ -66,6 +69,7 @@ public class AuthService {
         }
         Role employeeRole = roleRepository.findByCode("EMPLOYEE")
             .orElseThrow(() -> new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "ROLE_MISSING", "Default employee role is missing."));
+        departmentService.requireExistingDepartment(request.department());
         UserAccount user = new UserAccount();
         user.setUsername(request.username());
         user.setPasswordHash(passwordEncoder.encode(request.password()));
@@ -82,7 +86,7 @@ public class AuthService {
 
     @Transactional
     public AuthTokenResponse login(LoginRequest request) {
-        UserAccount user = userRepository.findByUsername(request.username())
+        UserAccount user = userRepository.findByUsernameAndDeletedAtIsNull(request.username())
             .orElseThrow(() -> {
                 operationLogService.log(null, "LOGIN", "USER", request.username(), OperationResult.FAILURE, "Unknown username.");
                 return new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Invalid username or password.");
@@ -105,7 +109,7 @@ public class AuthService {
         }
         existing.setRevokedAt(Instant.now());
         UserAccount user = existing.getUser();
-        if (user.getStatus() != UserStatus.ACTIVE) {
+        if (user.getDeletedAt() != null || user.getStatus() != UserStatus.ACTIVE) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "USER_DISABLED", "User is disabled.");
         }
         AuthTokenResponse response = issueTokens(user);

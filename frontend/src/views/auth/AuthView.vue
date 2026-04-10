@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
+import { api } from '@/api/service'
 import { useAuthStore } from '@/stores/auth'
+import type { Department } from '@/types'
 
 const auth = useAuthStore()
 const router = useRouter()
 
 const mode = ref<'login' | 'register'>('login')
 const error = ref('')
+const departments = ref<Department[]>([])
 
 const loginForm = reactive({
   username: 'admin',
@@ -52,6 +55,20 @@ function fillCredential(username: string, password: string) {
   loginForm.username = username
   loginForm.password = password
 }
+
+async function loadDepartments() {
+  try {
+    const loaded = await api.publicDepartments()
+    departments.value = loaded
+    if (loaded.length && !loaded.some((department) => department.name === registerForm.department)) {
+      registerForm.department = loaded[0].name
+    }
+  } catch {
+    departments.value = []
+  }
+}
+
+onMounted(loadDepartments)
 </script>
 
 <template>
@@ -136,7 +153,12 @@ function fillCredential(username: string, password: string) {
             </div>
             <div class="field">
               <label>部门</label>
-              <input v-model="registerForm.department" placeholder="例如 East Sales" />
+              <select v-if="departments.length" v-model="registerForm.department">
+                <option v-for="department in departments" :key="department.id" :value="department.name">
+                  {{ department.name }}
+                </option>
+              </select>
+              <input v-else v-model="registerForm.department" placeholder="例如 East Sales" />
             </div>
           </div>
           <div class="field">

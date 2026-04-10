@@ -41,6 +41,16 @@ CREATE TABLE IF NOT EXISTS permissions (
   UNIQUE KEY uk_permissions_code (code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS departments (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  created_at DATETIME(6) NOT NULL,
+  updated_at DATETIME(6) NOT NULL,
+  description VARCHAR(255) NULL,
+  name VARCHAR(80) NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_departments_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS roles (
   id BIGINT NOT NULL AUTO_INCREMENT,
   created_at DATETIME(6) NOT NULL,
@@ -56,6 +66,7 @@ CREATE TABLE IF NOT EXISTS users (
   id BIGINT NOT NULL AUTO_INCREMENT,
   created_at DATETIME(6) NOT NULL,
   updated_at DATETIME(6) NOT NULL,
+  deleted_at DATETIME(6) NULL,
   department VARCHAR(80) NOT NULL,
   display_name VARCHAR(80) NOT NULL,
   email VARCHAR(120) NULL,
@@ -66,6 +77,9 @@ CREATE TABLE IF NOT EXISTS users (
   PRIMARY KEY (id),
   UNIQUE KEY uk_users_username (username)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS deleted_at DATETIME(6) NULL;
 
 CREATE TABLE IF NOT EXISTS user_roles (
   user_id BIGINT NOT NULL,

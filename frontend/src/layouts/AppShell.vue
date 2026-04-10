@@ -86,10 +86,12 @@ async function handleLogout() {
   grid-template-columns: 280px minmax(0, 1fr);
   gap: 1.25rem;
   padding: 1.25rem;
+  align-items: start;
+  min-height: 100vh;
 }
 
 .rail {
-  min-height: calc(100vh - 2.5rem);
+  height: calc(100vh - 2.5rem);
   background:
     radial-gradient(circle at top right, rgba(180, 104, 60, 0.22), transparent 30%),
     linear-gradient(180deg, #17161a 0%, #1d1c22 100%);
@@ -101,6 +103,8 @@ async function handleLogout() {
   box-shadow: 0 32px 80px rgba(17, 13, 10, 0.28);
   position: sticky;
   top: 1.25rem;
+  align-self: start;
+  overflow: hidden;
 }
 
 .brand strong {
@@ -121,6 +125,9 @@ async function handleLogout() {
   align-content: start;
   gap: 0.4rem;
   margin-top: 2rem;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 0.2rem;
 }
 
 .nav-link {
@@ -231,7 +238,7 @@ async function handleLogout() {
 
   .rail {
     position: relative;
-    min-height: auto;
+    height: auto;
   }
 }
 

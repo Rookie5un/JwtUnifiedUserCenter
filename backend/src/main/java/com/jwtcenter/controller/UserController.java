@@ -8,6 +8,7 @@ import com.jwtcenter.dto.user.UpdateUserStatusRequest;
 import com.jwtcenter.dto.user.UserResponse;
 import com.jwtcenter.service.UserService;
 import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -57,5 +58,11 @@ public class UserController {
     @PostMapping("/{userId}/roles")
     public ApiResponse<UserResponse> assignRoles(@PathVariable Long userId, @Valid @RequestBody AssignRolesRequest request) {
         return ApiResponse.success("Roles assigned.", userService.assignRoles(userId, request));
+    }
+
+    @DeleteMapping("/{userId}")
+    public ApiResponse<Void> deleteUser(@PathVariable Long userId) {
+        userService.deleteUser(userId);
+        return ApiResponse.success("User deleted.", null);
     }
 }

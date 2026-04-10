@@ -39,7 +39,7 @@ public class TokenInspectionService {
 
     private TokenInspectResponse buildResponse(Claims claims, boolean expired) {
         Long userId = ((Number) claims.get("uid")).longValue();
-        UserAccount user = userRepository.findById(userId).orElse(null);
+        UserAccount user = userRepository.findByIdAndDeletedAtIsNull(userId).orElse(null);
         UserResponse userResponse = user == null ? null : MapperUtils.toUserResponse(user);
         List<String> roles = userResponse == null ? List.of() : userResponse.roles();
         List<String> permissions = userResponse == null ? List.of() : userResponse.permissions();

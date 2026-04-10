@@ -16,8 +16,6 @@ const loading = ref(true)
 const error = ref('')
 const activeId = ref<number | null>(null)
 const allRecordsOpen = ref(false)
-const deleteConfirmOpen = ref(false)
-const pendingDeleteRecordId = ref<number | null>(null)
 const recordPreviewLimit = 4
 
 const form = reactive({
@@ -30,7 +28,6 @@ const form = reactive({
 const selectedRecord = computed(() => records.value.find((item) => item.id === activeId.value) ?? null)
 const canCreateRecord = computed(() => auth.hasPermission('PERFORMANCE_CREATE'))
 const canEditSelfRecord = computed(() => auth.hasPermission('PERFORMANCE_EDIT_SELF'))
-const canDeleteSelfRecord = computed(() => auth.hasPermission('PERFORMANCE_DELETE_SELF'))
 const canViewLedger = computed(() => auth.canViewOwnPerformance)
 const showCreateComposer = computed(() => canCreateRecord.value && activeId.value === null)
 const showEditComposer = computed(() => Boolean(activeId.value) && canEditSelfRecord.value)
@@ -44,10 +41,6 @@ const hasHiddenRecords = computed(() => hiddenRecordCount.value > 0)
 
 const canEditRecord = (record: PerformanceRecord) =>
   canEditSelfRecord.value && record.ownerId === auth.user?.id && record.status !== 'APPROVED'
-
-const canDeleteRecord = (record: PerformanceRecord) =>
-  canDeleteSelfRecord.value && record.ownerId === auth.user?.id && record.status !== 'APPROVED'
-const pendingDeleteRecord = computed(() => records.value.find((item) => item.id === pendingDeleteRecordId.value) ?? null)
 
 function resetForm() {
   activeId.value = null
@@ -107,35 +100,6 @@ async function submit() {
     await loadData()
   } catch (err) {
     error.value = err instanceof Error ? err.message : '保存失败。'
-  }
-}
-
-async function removeRecord(recordId: number) {
-  try {
-    await api.deleteRecord(recordId)
-    if (activeId.value === recordId) resetForm()
-    await loadData()
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : '删除失败。'
-  }
-}
-
-function requestRemoveRecord(recordId: number) {
-  allRecordsOpen.value = false
-  pendingDeleteRecordId.value = recordId
-  deleteConfirmOpen.value = true
-}
-
-function closeDeleteConfirm() {
-  deleteConfirmOpen.value = false
-  pendingDeleteRecordId.value = null
-}
-
-function confirmRemoveRecord() {
-  const recordId = pendingDeleteRecordId.value
-  closeDeleteConfirm()
-  if (recordId) {
-    void removeRecord(recordId)
   }
 }
 
@@ -268,13 +232,6 @@ onMounted(loadData)
               >
                 编辑
               </button>
-              <button
-                v-if="canDeleteRecord(record)"
-                class="button button-secondary"
-                @click="requestRemoveRecord(record.id)"
-              >
-                删除
-              </button>
             </div>
           </article>
         </div>
@@ -288,7 +245,7 @@ onMounted(loadData)
       @close="allRecordsOpen = false"
     >
       <p class="muted">
-        当前可见范围内共 {{ records.length }} 条记录，完整列表保留编辑和删除入口。
+        当前可见范围内共 {{ records.length }} 条记录，完整列表保留编辑入口。
       </p>
 
       <div v-if="records.length" class="dialog-ledger-list">
@@ -316,14 +273,6 @@ onMounted(loadData)
             >
               编辑
             </button>
-            <button
-              v-if="canDeleteRecord(record)"
-              class="button button-secondary"
-              type="button"
-              @click="requestRemoveRecord(record.id)"
-            >
-              删除
-            </button>
           </div>
         </article>
       </div>
@@ -332,20 +281,6 @@ onMounted(loadData)
       <template #actions>
         <button class="button button-primary" type="button" @click="allRecordsOpen = false">关闭</button>
       </template>
-    </AppDialog>
-
-    <AppDialog
-      :open="deleteConfirmOpen"
-      title="确认删除业绩记录"
-      confirm-text="删除记录"
-      tone="danger"
-      @close="closeDeleteConfirm"
-      @confirm="confirmRemoveRecord"
-    >
-      <p class="muted">删除后这条记录会从当前台账中移除，无法继续进入审批流程。</p>
-      <strong v-if="pendingDeleteRecord">
-        {{ pendingDeleteRecord.type }} · {{ formatCurrency(pendingDeleteRecord.amount) }} · {{ formatDate(pendingDeleteRecord.occurredOn) }}
-      </strong>
     </AppDialog>
   </div>
 </template>

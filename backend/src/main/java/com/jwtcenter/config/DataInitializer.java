@@ -1,5 +1,6 @@
 package com.jwtcenter.config;
 
+import com.jwtcenter.entity.Department;
 import com.jwtcenter.entity.Permission;
 import com.jwtcenter.entity.PerformanceRecord;
 import com.jwtcenter.entity.Role;
@@ -7,6 +8,7 @@ import com.jwtcenter.entity.UserAccount;
 import com.jwtcenter.enums.PermissionType;
 import com.jwtcenter.enums.PerformanceStatus;
 import com.jwtcenter.enums.UserStatus;
+import com.jwtcenter.repository.DepartmentRepository;
 import com.jwtcenter.repository.PermissionRepository;
 import com.jwtcenter.repository.PerformanceRecordRepository;
 import com.jwtcenter.repository.RoleRepository;
@@ -23,6 +25,7 @@ import java.time.LocalDate;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 @Configuration
@@ -30,6 +33,7 @@ public class DataInitializer {
 
     @Bean
     CommandLineRunner seedData(
+        DepartmentRepository departmentRepository,
         PermissionRepository permissionRepository,
         RoleRepository roleRepository,
         UserRepository userRepository,
@@ -38,6 +42,7 @@ public class DataInitializer {
         @Value("${app.seed-demo-data:true}") boolean seedDemoData
     ) {
         return args -> {
+            syncDepartments(departmentRepository, userRepository, performanceRecordRepository, seedDemoData);
             if (!seedDemoData) {
                 return;
             }
@@ -78,22 +83,62 @@ public class DataInitializer {
 
             roleRepository.saveAll(List.of(employeeRole, managerRole, adminRole));
 
-            UserAccount admin = user("admin", "Atlas 管理员", "Platform", "admin@atlas.local", "13800000000", UserStatus.ACTIVE, passwordEncoder.encode("Admin@123"), Set.of(adminRole));
+            UserAccount admin = user("admin", "Atlas 管理员", "East Sales", "admin@atlas.local", "13800000000", UserStatus.ACTIVE, passwordEncoder.encode("Admin@123"), Set.of(adminRole));
             UserAccount manager = user("manager", "苏南区经理", "East Sales", "manager@atlas.local", "13800000001", UserStatus.ACTIVE, passwordEncoder.encode("Manager@123"), Set.of(managerRole));
             UserAccount employee = user("employee", "林初", "East Sales", "employee@atlas.local", "13800000002", UserStatus.ACTIVE, passwordEncoder.encode("Employee@123"), Set.of(employeeRole));
-            UserAccount employeeTwo = user("employee2", "周航", "East Sales", "employee2@atlas.local", "13800000003", UserStatus.ACTIVE, passwordEncoder.encode("Employee@123"), Set.of(employeeRole));
+            UserAccount employeeTwo = user("employee2", "周航", "North Sales", "employee2@atlas.local", "13800000003", UserStatus.ACTIVE, passwordEncoder.encode("Employee@123"), Set.of(employeeRole));
+            UserAccount employeeThree = user("employee3", "顾屿", "South Sales", "employee3@atlas.local", "13800000004", UserStatus.ACTIVE, passwordEncoder.encode("Employee@123"), Set.of(employeeRole));
 
-            userRepository.saveAll(List.of(admin, manager, employee, employeeTwo));
+            userRepository.saveAll(List.of(admin, manager, employee, employeeTwo, employeeThree));
 
             if (performanceRecordRepository.count() == 0) {
                 performanceRecordRepository.saveAll(List.of(
                     performance(employee, new BigDecimal("132000.00"), LocalDate.now().minusDays(18), "新签合同", "华东大客户签约", PerformanceStatus.APPROVED, null, manager, Instant.now().minusSeconds(86400 * 14)),
                     performance(employee, new BigDecimal("68000.00"), LocalDate.now().minusDays(10), "续费回款", "年度续费完成", PerformanceStatus.PENDING, null, null, null),
                     performance(employeeTwo, new BigDecimal("54000.00"), LocalDate.now().minusDays(8), "新增渠道", "渠道合作落地", PerformanceStatus.REJECTED, "材料不完整，请补充合同附件", null, null),
-                    performance(manager, new BigDecimal("208000.00"), LocalDate.now().minusDays(25), "大项目成交", "重点行业解决方案成交", PerformanceStatus.APPROVED, null, admin, Instant.now().minusSeconds(86400 * 20))
+                    performance(manager, new BigDecimal("208000.00"), LocalDate.now().minusDays(25), "大项目成交", "重点行业解决方案成交", PerformanceStatus.APPROVED, null, admin, Instant.now().minusSeconds(86400 * 20)),
+                    performance(employeeThree, new BigDecimal("96000.00"), LocalDate.now().minusDays(12), "区域拓展", "南区新客户签约", PerformanceStatus.APPROVED, null, admin, Instant.now().minusSeconds(86400 * 9))
                 ));
             }
         };
+    }
+
+    private void syncDepartments(
+        DepartmentRepository departmentRepository,
+        UserRepository userRepository,
+        PerformanceRecordRepository performanceRecordRepository,
+        boolean seedDemoData
+    ) {
+        Set<String> departmentNames = new LinkedHashSet<>();
+        if (seedDemoData) {
+            departmentNames.addAll(List.of(
+                "East Sales",
+                "North Sales",
+                "South Sales",
+                "West Sales",
+                "Key Accounts",
+                "Channel Partners"
+            ));
+        }
+        userRepository.findAll().stream()
+            .map(UserAccount::getDepartment)
+            .filter(Objects::nonNull)
+            .map(String::trim)
+            .filter(value -> !value.isEmpty())
+            .forEach(departmentNames::add);
+        performanceRecordRepository.findAll().stream()
+            .map(PerformanceRecord::getDepartment)
+            .filter(Objects::nonNull)
+            .map(String::trim)
+            .filter(value -> !value.isEmpty())
+            .forEach(departmentNames::add);
+
+        departmentNames.forEach(name -> departmentRepository.findByName(name).orElseGet(() -> {
+            Department department = new Department();
+            department.setName(name);
+            department.setDescription(name + " team");
+            return departmentRepository.save(department);
+        }));
     }
 
     private Permission permission(

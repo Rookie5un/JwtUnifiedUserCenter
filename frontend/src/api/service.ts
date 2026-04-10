@@ -1,6 +1,7 @@
 import { clearTokens, getRefreshToken, request, setTokens } from './client'
 import type {
   AuthPayload,
+  Department,
   DashboardMetric,
   DashboardResponse,
   LoginPayload,
@@ -30,6 +31,9 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     }, false)
+  },
+  publicDepartments() {
+    return request<Department[]>('/departments/public', {}, false)
   },
   me() {
     return request<User>('/auth/me')
@@ -61,6 +65,27 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(payload),
     })
+  },
+  deleteUser(id: number) {
+    return request<void>(`/users/${id}`, { method: 'DELETE' })
+  },
+  departments() {
+    return request<Department[]>('/departments')
+  },
+  createDepartment(payload: Pick<Department, 'name' | 'description'>) {
+    return request<Department>('/departments', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+  updateDepartment(id: number, payload: Pick<Department, 'name' | 'description'>) {
+    return request<Department>(`/departments/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    })
+  },
+  deleteDepartment(id: number) {
+    return request<void>(`/departments/${id}`, { method: 'DELETE' })
   },
   updateUserStatus(id: number, status: User['status']) {
     return request<User>(`/users/${id}/status`, {
@@ -140,9 +165,6 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(payload),
     })
-  },
-  deleteRecord(id: number) {
-    return request<void>(`/performance/records/${id}`, { method: 'DELETE' })
   },
   pendingApprovals() {
     return request<PerformanceRecord[]>('/performance/approvals/pending')

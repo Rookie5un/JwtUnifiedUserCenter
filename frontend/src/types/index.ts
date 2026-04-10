@@ -41,10 +41,18 @@ export interface RegisterPayload {
 }
 
 export interface UpdateUserPayload {
+  username: string
   displayName: string
   department: string
   email?: string
   phone?: string
+}
+
+export interface Department {
+  id: number
+  name: string
+  description?: string
+  createdAt: string
 }
 
 export interface Role {

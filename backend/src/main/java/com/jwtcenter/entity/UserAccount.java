@@ -11,6 +11,7 @@ import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.Table;
 
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -39,6 +40,8 @@ public class UserAccount extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private UserStatus status = UserStatus.ACTIVE;
+
+    private Instant deletedAt;
 
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
@@ -102,6 +105,14 @@ public class UserAccount extends BaseEntity {
 
     public void setStatus(UserStatus status) {
         this.status = status;
+    }
+
+    public Instant getDeletedAt() {
+        return deletedAt;
+    }
+
+    public void setDeletedAt(Instant deletedAt) {
+        this.deletedAt = deletedAt;
     }
 
     public Set<Role> getRoles() {
