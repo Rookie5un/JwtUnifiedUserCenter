@@ -12,8 +12,11 @@ import type {
   RankingItem,
   RegisterPayload,
   Role,
+  SsoAuthorization,
+  SsoTicketVerification,
   UpdateUserPayload,
   User,
+  PortalApp,
 } from '@/types'
 
 export const api = {
@@ -197,5 +200,18 @@ export const api = {
   },
   logs(limit = 60) {
     return request<OperationLog[]>(`/logs?limit=${limit}`)
+  },
+  portalApps() {
+    return request<PortalApp[]>('/portal/apps')
+  },
+  authorizePortalApp(appKey: string) {
+    return request<SsoAuthorization>(`/portal/apps/${appKey}/authorize`, {
+      method: 'POST',
+    })
+  },
+  verifySsoTicket(ticket: string) {
+    return request<SsoTicketVerification>(`/portal/sso/tickets/${encodeURIComponent(ticket)}/verify`, {
+      method: 'POST',
+    }, false)
   },
 }

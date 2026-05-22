@@ -73,285 +73,213 @@ onMounted(loadDepartments)
 
 <template>
   <div class="auth-page page-shell">
-    <section class="poster">
-      <div class="poster-inner fade-rise">
-        <span class="eyebrow">Atlas ID Workspace</span>
-        <h1 class="headline">让接口、认证与业务验证落在一处。</h1>
-        <p class="poster-copy">
-          基于 RESTful API 和 JWT 的统一用户中心，把登录、接口访问和业绩审批整合成一套可验证的工作面。
-        </p>
-
-        <div class="poster-strips">
+    <main class="auth-stage">
+      <section class="login-card surface fade-rise">
+        <div class="login-head">
           <div>
-            <span>RESTful API</span>
-            <strong>统一接口规范与协同边界</strong>
+            <span class="eyebrow">Unified User Center</span>
+            <h1>统一用户中心</h1>
+            <p>登录后进入集成门户，免密访问已授权业务系统。</p>
           </div>
-          <div>
-            <span>JWT</span>
-            <strong>无状态认证与访问链路</strong>
-          </div>
-          <div>
-            <span>Scenario</span>
-            <strong>统一用户中心与业绩验证</strong>
-          </div>
+          <div class="secure-mark">SSO</div>
         </div>
 
-        <div class="credentials surface fade-rise" style="animation-delay: 140ms">
-          <div class="credentials-header">
-            <span class="eyebrow">Quick Entry</span>
-            <strong>演示账号</strong>
-          </div>
-          <button
-            v-for="item in credentials"
-            :key="item.role"
-            class="credential-row"
-            @click="fillCredential(item.username, item.password)"
-          >
-            <span>{{ item.role }}</span>
-            <strong>{{ item.username }}</strong>
-            <small>{{ item.password }}</small>
+        <div class="toggle" aria-label="认证方式">
+          <button type="button" :class="{ active: mode === 'login' }" @click="mode = 'login'">登录</button>
+          <button type="button" :class="{ active: mode === 'register' }" @click="mode = 'register'">注册</button>
+        </div>
+
+        <form class="auth-form" @submit.prevent="submit">
+          <template v-if="mode === 'login'">
+            <div class="field">
+              <label>用户名</label>
+              <input v-model="loginForm.username" autocomplete="username" placeholder="admin" />
+            </div>
+            <div class="field">
+              <label>密码</label>
+              <input
+                v-model="loginForm.password"
+                type="password"
+                autocomplete="current-password"
+                placeholder="输入登录密码"
+              />
+            </div>
+          </template>
+
+          <template v-else>
+            <div class="field">
+              <label>用户名</label>
+              <input v-model="registerForm.username" autocomplete="username" placeholder="选择一个账号名" />
+            </div>
+            <div class="field two-up">
+              <div class="field">
+                <label>姓名</label>
+                <input v-model="registerForm.displayName" placeholder="例如 林初" />
+              </div>
+              <div class="field">
+                <label>部门</label>
+                <select v-if="departments.length" v-model="registerForm.department">
+                  <option v-for="department in departments" :key="department.id" :value="department.name">
+                    {{ department.name }}
+                  </option>
+                </select>
+                <input v-else v-model="registerForm.department" placeholder="例如 East Sales" />
+              </div>
+            </div>
+            <div class="field two-up">
+              <div class="field">
+                <label>邮箱</label>
+                <input v-model="registerForm.email" type="email" placeholder="name@company.com" />
+              </div>
+              <div class="field">
+                <label>手机号</label>
+                <input v-model="registerForm.phone" placeholder="13800000000" />
+              </div>
+            </div>
+            <div class="field">
+              <label>密码</label>
+              <input
+                v-model="registerForm.password"
+                type="password"
+                autocomplete="new-password"
+                placeholder="至少 8 位"
+              />
+            </div>
+          </template>
+
+          <p v-if="error" class="error-copy">{{ error }}</p>
+
+          <button class="button button-primary submit" :disabled="auth.loading">
+            {{ auth.loading ? '处理中...' : mode === 'login' ? '登录并进入门户' : '创建账户' }}
           </button>
+        </form>
+
+        <div class="credential-panel">
+          <span>演示账号</span>
+          <div class="credential-list">
+            <button
+              v-for="item in credentials"
+              :key="item.role"
+              type="button"
+              class="credential-chip"
+              @click="fillCredential(item.username, item.password)"
+            >
+              <strong>{{ item.role }}</strong>
+              <small>{{ item.username }}</small>
+            </button>
+          </div>
         </div>
-      </div>
-    </section>
-
-    <section class="auth-panel fade-rise" style="animation-delay: 120ms">
-      <div class="panel-head">
-        <span class="eyebrow">Secure Access</span>
-        <div class="toggle">
-          <button :class="{ active: mode === 'login' }" @click="mode = 'login'">登录</button>
-          <button :class="{ active: mode === 'register' }" @click="mode = 'register'">注册</button>
-        </div>
-      </div>
-
-      <form class="auth-form" @submit.prevent="submit">
-        <template v-if="mode === 'login'">
-          <div class="field">
-            <label>用户名</label>
-            <input v-model="loginForm.username" autocomplete="username" placeholder="admin" />
-          </div>
-          <div class="field">
-            <label>密码</label>
-            <input
-              v-model="loginForm.password"
-              type="password"
-              autocomplete="current-password"
-              placeholder="输入登录密码"
-            />
-          </div>
-        </template>
-
-        <template v-else>
-          <div class="field">
-            <label>用户名</label>
-            <input v-model="registerForm.username" placeholder="选择一个账号名" />
-          </div>
-          <div class="field two-up">
-            <div class="field">
-              <label>姓名</label>
-              <input v-model="registerForm.displayName" placeholder="例如 林初" />
-            </div>
-            <div class="field">
-              <label>部门</label>
-              <select v-if="departments.length" v-model="registerForm.department">
-                <option v-for="department in departments" :key="department.id" :value="department.name">
-                  {{ department.name }}
-                </option>
-              </select>
-              <input v-else v-model="registerForm.department" placeholder="例如 East Sales" />
-            </div>
-          </div>
-          <div class="field">
-            <label>邮箱</label>
-            <input v-model="registerForm.email" type="email" placeholder="name@company.com" />
-          </div>
-          <div class="field">
-            <label>手机号</label>
-            <input v-model="registerForm.phone" placeholder="13800000000" />
-          </div>
-          <div class="field">
-            <label>密码</label>
-            <input v-model="registerForm.password" type="password" placeholder="至少 8 位" />
-          </div>
-        </template>
-
-        <p v-if="error" class="error-copy">{{ error }}</p>
-
-        <button class="button button-primary submit" :disabled="auth.loading">
-          {{ auth.loading ? '处理中...' : mode === 'login' ? '进入工作台' : '创建账户' }}
-        </button>
-      </form>
-    </section>
+      </section>
+    </main>
   </div>
 </template>
 
 <style scoped>
 .auth-page {
   min-height: 100vh;
-  display: grid;
-  grid-template-columns: 1.15fr minmax(360px, 0.85fr);
-}
-
-.poster {
   position: relative;
   overflow: hidden;
-  padding: 2rem;
-  display: flex;
-  align-items: stretch;
+  background:
+    linear-gradient(120deg, rgba(18, 20, 25, 0.72), rgba(18, 20, 25, 0.28)),
+    url("https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=2200&q=80") center/cover;
 }
 
-.poster::before,
-.poster::after {
+.auth-page::before {
   content: "";
   position: absolute;
-  border-radius: 999px;
-  filter: blur(6px);
+  inset: 0;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.82), transparent 92%);
 }
 
-.poster::before {
-  width: 420px;
-  height: 420px;
-  right: -90px;
-  top: 10%;
-  background: radial-gradient(circle, rgba(180, 104, 60, 0.18), transparent 66%);
-}
-
-.poster::after {
-  width: 320px;
-  height: 320px;
-  left: -120px;
-  bottom: -80px;
-  background: radial-gradient(circle, rgba(23, 22, 26, 0.14), transparent 72%);
-}
-
-.poster-inner {
+.auth-stage {
   position: relative;
   z-index: 1;
-  width: 100%;
-  border-radius: 36px;
-  padding: clamp(1.6rem, 3vw, 3rem);
+  min-height: 100vh;
   display: grid;
-  align-content: space-between;
-  gap: 2rem;
-  background:
-    linear-gradient(140deg, rgba(255, 252, 247, 0.64), rgba(255, 252, 247, 0.16)),
-    linear-gradient(180deg, #f3ede4 0%, #e9e1d3 100%);
-  box-shadow: 0 42px 90px rgba(36, 30, 21, 0.14);
-}
-
-.poster-copy {
-  max-width: 38rem;
-  font-size: 1.08rem;
-  line-height: 1.8;
-  color: var(--ink-soft);
-  margin: 1.4rem 0 0;
-}
-
-.poster-strips {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
-  margin-top: 1rem;
-}
-
-.poster-strips div {
-  padding-top: 1rem;
-  border-top: 1px solid var(--line);
-  display: grid;
-  gap: 0.35rem;
-}
-
-.poster-strips span {
-  font-size: 0.74rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--ink-soft);
-}
-
-.poster-strips strong {
-  font-size: 1.03rem;
-  line-height: 1.4;
-}
-
-.credentials {
-  border-radius: 30px;
-  padding: 1rem;
-  display: grid;
-  gap: 0.65rem;
-  max-width: 520px;
-}
-
-.credentials-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-}
-
-.credential-row {
-  display: grid;
-  grid-template-columns: 72px 1fr auto;
-  gap: 1rem;
-  align-items: center;
-  padding: 0.9rem 1rem;
-  border-radius: 22px;
-  background: rgba(255, 252, 247, 0.58);
-  border: 1px solid rgba(23, 22, 26, 0.06);
-}
-
-.credential-row span {
-  color: var(--ink-soft);
-}
-
-.credential-row small {
-  color: var(--ink-soft);
-}
-
-.auth-panel {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+  place-items: center;
   padding: 2rem;
 }
 
-.panel-head {
+.login-card {
+  width: min(100%, 520px);
+  border-radius: 28px;
+  padding: clamp(1.2rem, 3vw, 1.8rem);
+  background: rgba(255, 252, 247, 0.88);
+  border-color: rgba(255, 255, 255, 0.68);
+}
+
+.login-head {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
+  gap: 1.2rem;
+  align-items: start;
+}
+
+.login-head h1 {
+  margin: 0.35rem 0 0;
+  font-size: clamp(2rem, 5vw, 3rem);
+  letter-spacing: -0.05em;
+}
+
+.login-head p {
+  margin: 0.75rem 0 0;
+  color: var(--ink-soft);
+  line-height: 1.7;
+}
+
+.secure-mark {
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: #fff8f2;
+  background: var(--ink);
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  box-shadow: 0 18px 40px rgba(23, 22, 26, 0.18);
 }
 
 .toggle {
-  display: inline-flex;
-  background: rgba(255, 252, 247, 0.7);
-  padding: 0.3rem;
-  border-radius: 999px;
-  border: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem;
+  margin: 1.6rem 0 1.2rem;
+  padding: 0.35rem;
+  border-radius: 18px;
+  background: rgba(23, 22, 26, 0.06);
 }
 
 .toggle button {
   border: none;
+  border-radius: 14px;
   background: transparent;
   color: var(--ink-soft);
-  padding: 0.75rem 1rem;
-  border-radius: 999px;
+  padding: 0.78rem 1rem;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.toggle button:hover {
+  transform: translateY(-1px);
 }
 
 .toggle button.active {
   background: var(--ink);
-  color: #fdf8f2;
+  color: #fff8f2;
 }
 
 .auth-form {
-  max-width: 440px;
-  background: rgba(255, 252, 247, 0.58);
-  border: 1px solid rgba(255, 255, 255, 0.72);
-  box-shadow: var(--shadow);
-  border-radius: 32px;
-  padding: 1.4rem;
   display: grid;
   gap: 1rem;
-  backdrop-filter: blur(22px);
 }
 
 .two-up {
@@ -361,7 +289,8 @@ onMounted(loadDepartments)
 }
 
 .submit {
-  margin-top: 0.4rem;
+  width: 100%;
+  margin-top: 0.25rem;
 }
 
 .error-copy {
@@ -369,20 +298,69 @@ onMounted(loadDepartments)
   color: var(--danger);
 }
 
-@media (max-width: 980px) {
-  .auth-page {
-    grid-template-columns: 1fr;
-  }
+.credential-panel {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(23, 22, 26, 0.09);
+  display: grid;
+  gap: 0.75rem;
+}
 
-  .poster-strips {
-    grid-template-columns: 1fr;
-  }
+.credential-panel > span {
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
+
+.credential-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.credential-chip {
+  border: 1px solid rgba(23, 22, 26, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 252, 247, 0.66);
+  padding: 0.62rem 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--ink);
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease;
+}
+
+.credential-chip:hover {
+  transform: translateY(-1px);
+  border-color: rgba(180, 104, 60, 0.34);
+  background: rgba(255, 252, 247, 0.94);
+}
+
+.credential-chip small {
+  color: var(--ink-soft);
 }
 
 @media (max-width: 640px) {
-  .poster,
-  .auth-panel {
+  .auth-stage {
     padding: 1rem;
+    place-items: stretch;
+    align-content: center;
+  }
+
+  .login-card {
+    border-radius: 24px;
+  }
+
+  .login-head {
+    align-items: center;
+  }
+
+  .secure-mark {
+    width: 50px;
+    height: 50px;
+    border-radius: 16px;
   }
 
   .two-up {

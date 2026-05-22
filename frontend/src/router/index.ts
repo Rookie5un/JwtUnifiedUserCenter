@@ -7,8 +7,11 @@ import ApprovalsView from '@/views/performance/ApprovalsView.vue'
 import ApiDocsView from '@/views/docs/ApiDocsView.vue'
 import LogsView from '@/views/logs/LogsView.vue'
 import AdminView from '@/views/admin/AdminView.vue'
+import PortalAppView from '@/views/apps/PortalAppView.vue'
+import StandaloneSystemView from '@/views/apps/StandaloneSystemView.vue'
 import AppShell from '@/layouts/AppShell.vue'
 import { useAuthStore } from '@/stores/auth'
+import { usePortalStore } from '@/stores/portal'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -17,6 +20,11 @@ const router = createRouter({
       path: '/login',
       name: 'login',
       component: AuthView,
+    },
+    {
+      path: '/systems/:appKey',
+      name: 'standalone-system',
+      component: StandaloneSystemView,
     },
     {
       path: '/',
@@ -37,6 +45,11 @@ const router = createRouter({
           name: 'approvals',
           component: ApprovalsView,
           meta: { managerOnly: true },
+        },
+        {
+          path: 'apps/:appKey',
+          name: 'portal-app',
+          component: PortalAppView,
         },
         {
           path: 'docs',
@@ -63,6 +76,7 @@ const router = createRouter({
 
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
+  const portal = usePortalStore()
   if (!auth.user && to.name !== 'login') {
     await auth.bootstrap()
   }
@@ -72,7 +86,12 @@ router.beforeEach(async (to) => {
   }
 
   if (to.name !== 'login' && !auth.isAuthenticated) {
+    if (to.name === 'standalone-system') return true
     return { name: 'login' }
+  }
+
+  if (to.name === 'standalone-system') {
+    return true
   }
 
   if (to.name !== 'login' && auth.isAuthenticated) {
@@ -82,6 +101,15 @@ router.beforeEach(async (to) => {
       await auth.logout()
       return { name: 'login' }
     }
+  }
+
+  if (to.name === 'portal-app') {
+    await portal.loadApps(auth.user?.id)
+    const appKey = String(to.params.appKey ?? '')
+    if (!portal.canAccess(appKey)) {
+      return { name: 'overview' }
+    }
+    return { name: 'standalone-system', params: { appKey }, query: to.query, replace: true }
   }
 
   if (to.name === 'records' && !auth.canAccessRecordsPage) {

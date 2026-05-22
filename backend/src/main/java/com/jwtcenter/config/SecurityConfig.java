@@ -41,6 +41,7 @@ public class SecurityConfig {
                     "/auth/login",
                     "/auth/refresh",
                     "/departments/public",
+                    "/portal/sso/tickets/**",
                     "/tokens/**",
                     "/swagger-ui.html",
                     "/swagger-ui/**",

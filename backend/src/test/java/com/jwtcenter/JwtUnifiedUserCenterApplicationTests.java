@@ -6,8 +6,10 @@ import com.jwtcenter.entity.Permission;
 import com.jwtcenter.entity.Role;
 import com.jwtcenter.entity.UserAccount;
 import com.jwtcenter.repository.PermissionRepository;
+import com.jwtcenter.repository.PerformanceRecordRepository;
 import com.jwtcenter.repository.RoleRepository;
 import com.jwtcenter.repository.UserRepository;
+import com.jwtcenter.enums.PerformanceStatus;
 import com.jwtcenter.security.PermissionCodes;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -48,6 +50,9 @@ class JwtUnifiedUserCenterApplicationTests {
 
     @Autowired
     private PermissionRepository permissionRepository;
+
+    @Autowired
+    private PerformanceRecordRepository performanceRecordRepository;
 
     @Test
     void registerShouldCreateUserWithEncryptedPassword() throws Exception {
@@ -163,14 +168,37 @@ class JwtUnifiedUserCenterApplicationTests {
     @Test
     void dashboardTotalAmountShouldOnlyCountApprovedRecords() throws Exception {
         String accessToken = login("admin", "Admin@123");
+        BigDecimal expectedTotal = performanceRecordRepository.findAll()
+            .stream()
+            .filter(record -> record.getStatus() == PerformanceStatus.APPROVED)
+            .map(record -> record.getAmount())
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        long expectedApprovedCount = performanceRecordRepository.findAll()
+            .stream()
+            .filter(record -> record.getStatus() == PerformanceStatus.APPROVED)
+            .count();
+        long expectedPendingCount = performanceRecordRepository.findAll()
+            .stream()
+            .filter(record -> record.getStatus() == PerformanceStatus.PENDING)
+            .count();
+        long expectedRejectedCount = performanceRecordRepository.findAll()
+            .stream()
+            .filter(record -> record.getStatus() == PerformanceStatus.REJECTED)
+            .count();
 
-        mockMvc.perform(get("/performance/dashboard/global")
+        MvcResult result = mockMvc.perform(get("/performance/dashboard/global")
                 .header("Authorization", "Bearer " + accessToken))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.totalAmount").value(436000.00))
-            .andExpect(jsonPath("$.data.approvedCount").value(3))
-            .andExpect(jsonPath("$.data.pendingCount").value(1))
-            .andExpect(jsonPath("$.data.rejectedCount").value(1));
+            .andExpect(jsonPath("$.data.approvedCount").value((int) expectedApprovedCount))
+            .andExpect(jsonPath("$.data.pendingCount").value((int) expectedPendingCount))
+            .andExpect(jsonPath("$.data.rejectedCount").value((int) expectedRejectedCount))
+            .andReturn();
+
+        BigDecimal actualTotal = objectMapper.readTree(result.getResponse().getContentAsString())
+            .path("data")
+            .path("totalAmount")
+            .decimalValue();
+        assertThat(actualTotal).isEqualByComparingTo(expectedTotal);
     }
 
     @Test
@@ -359,6 +387,78 @@ class JwtUnifiedUserCenterApplicationTests {
                     """.formatted(LocalDate.now())))
             .andExpect(status().isForbidden())
             .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    }
+
+    @Test
+    void portalAppsShouldBeFilteredByCurrentUserPermissions() throws Exception {
+        String adminToken = login("admin", "Admin@123");
+        mockMvc.perform(get("/portal/apps")
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data[?(@.key=='permission')]").exists())
+            .andExpect(jsonPath("$.data[?(@.key=='docs')]").exists());
+
+        String employeeToken = login("employee", "Employee@123");
+        mockMvc.perform(get("/portal/apps")
+                .header("Authorization", "Bearer " + employeeToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data[?(@.key=='oa')]").exists())
+            .andExpect(jsonPath("$.data[?(@.key=='performance')]").exists())
+            .andExpect(jsonPath("$.data[?(@.key=='permission')]").doesNotExist())
+            .andExpect(jsonPath("$.data[?(@.key=='approval')]").doesNotExist());
+
+        String managerToken = login("manager", "Manager@123");
+        mockMvc.perform(get("/portal/apps")
+                .header("Authorization", "Bearer " + managerToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data[?(@.key=='performance')]").exists())
+            .andExpect(jsonPath("$.data[?(@.key=='approval')]").doesNotExist());
+    }
+
+    @Test
+    void portalAuthorizationShouldIssueTicketAndAuditAccess() throws Exception {
+        String employeeToken = login("employee", "Employee@123");
+
+        MvcResult authorizationResult = mockMvc.perform(post("/portal/apps/finance/authorize")
+                .header("Authorization", "Bearer " + employeeToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.appKey").value("finance"))
+            .andExpect(jsonPath("$.data.accessTicket").isNotEmpty())
+            .andExpect(jsonPath("$.data.targetPath").value("/systems/finance"))
+            .andExpect(jsonPath("$.data.entryPath").isNotEmpty())
+            .andReturn();
+
+        String ticket = objectMapper.readTree(authorizationResult.getResponse().getContentAsString())
+            .path("data")
+            .path("accessTicket")
+            .asText();
+
+        mockMvc.perform(post("/portal/sso/tickets/" + ticket + "/verify")
+                .header("Authorization", "Bearer " + employeeToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.appKey").value("finance"))
+            .andExpect(jsonPath("$.data.status").value("VERIFIED"))
+            .andExpect(jsonPath("$.data.user.username").value("employee"));
+
+        mockMvc.perform(get("/portal/apps")
+                .header("Authorization", "Bearer " + employeeToken))
+            .andExpect(status().isOk());
+
+        String adminToken = login("admin", "Admin@123");
+        mockMvc.perform(get("/logs?limit=20")
+                .header("Authorization", "Bearer " + adminToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data[?(@.action=='APP_ACCESS' && @.resourceId=='finance' && @.result=='SUCCESS')]").exists());
+    }
+
+    @Test
+    void portalAuthorizationShouldRejectUnauthorizedApp() throws Exception {
+        String employeeToken = login("employee", "Employee@123");
+
+        mockMvc.perform(post("/portal/apps/permission/authorize")
+                .header("Authorization", "Bearer " + employeeToken))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("APP_ACCESS_DENIED"));
     }
 
     private String login(String username, String password) throws Exception {

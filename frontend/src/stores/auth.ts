@@ -2,6 +2,7 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { api } from '@/api/service'
+import { usePortalStore } from '@/stores/portal'
 import type { LoginPayload, RegisterPayload, User } from '@/types'
 
 export const useAuthStore = defineStore('auth', () => {
@@ -56,8 +57,10 @@ export const useAuthStore = defineStore('auth', () => {
   async function bootstrap() {
     try {
       user.value = await api.me()
+      await usePortalStore().loadApps(user.value.id)
     } catch {
       user.value = null
+      usePortalStore().reset()
     }
   }
 
@@ -66,6 +69,7 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const auth = await api.login(payload)
       user.value = auth.user
+      await usePortalStore().loadApps(auth.user.id, true)
       return auth
     } finally {
       loading.value = false
@@ -83,11 +87,13 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function refreshProfile() {
     user.value = await api.me()
+    await usePortalStore().loadApps(user.value.id)
   }
 
   async function logout() {
     await api.logout()
     user.value = null
+    usePortalStore().reset()
   }
 
   return {

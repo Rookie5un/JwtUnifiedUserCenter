@@ -129,3 +129,48 @@ export interface OperationLog {
   detail?: string
   createdAt: string
 }
+
+export interface PortalApp {
+  key: string
+  name: string
+  shortName: string
+  description: string
+  iconLabel: string
+  routeName: string
+  routeParams?: Record<string, string>
+  requiredRoles?: string[]
+  requiredPermissions?: string[]
+  status: 'online' | 'demo'
+  category: string
+  accent: string
+  metrics: Array<{
+    label: string
+    value: string
+  }>
+}
+
+export interface SsoAuthorization {
+  appKey: string
+  appName: string
+  accessTicket: string
+  targetPath: string
+  entryPath: string
+  issuedAt: string
+  expiresAt: string
+}
+
+export interface SsoTicketVerification {
+  appKey: string
+  appName: string
+  status: 'VERIFIED'
+  issuedAt: string
+  expiresAt: string
+  user: {
+    id: number
+    username: string
+    displayName: string
+    department: string
+    roles: string[]
+    permissions: string[]
+  }
+}

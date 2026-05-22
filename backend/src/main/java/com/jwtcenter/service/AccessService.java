@@ -24,6 +24,10 @@ public class AccessService {
         if (userId == null) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "Authentication is required.");
         }
+        return userById(userId);
+    }
+
+    public UserAccount userById(Long userId) {
         UserAccount user = userRepository.findByIdAndDeletedAtIsNull(userId)
             .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "Current user is no longer available."));
         if (user.getStatus() != UserStatus.ACTIVE) {

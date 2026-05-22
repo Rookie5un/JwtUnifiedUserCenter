@@ -1,14 +1,18 @@
-# Atlas ID Workspace
+# 统一用户中心与 SSO 集成门户
 
-基于 RESTful API 和 JWT 的统一用户中心与企业业绩验证系统完整实现，包含：
+基于 RESTful API 和 JWT 的统一用户中心与单点登录集成门户完整实现，包含：
 
 - `backend/`: Spring Boot 3 + RESTful API + JWT + OpenAPI
-- `frontend/`: Vue 3 + Vite 自定义高质感工作台界面
+- `frontend/`: Vue 3 + Vite 统一认证入口、集成门户和业务系统示例页
 
 ## 功能范围
 
 - 用户注册、登录、登出、刷新令牌、当前用户信息、修改密码
 - 用户管理、角色管理、权限管理、用户角色分配、角色权限分配
+- 登录后进入集成门户首页，按角色权限展示可访问业务系统
+- 后端提供业务系统目录与 SSO 授权接口，统一记录系统访问审计日志
+- OA、仓库、财务等伪业务系统免密跳转示例
+- 业绩审批系统复用真实业务接口，演示已登录状态下的跨系统切换
 - Swagger / OpenAPI 动态接口文档
 - JWT 校验与解析接口
 - 企业业绩录入、修改、删除、审批、统计、看板
@@ -44,6 +48,12 @@ Swagger 地址：
 
 - `http://localhost:8080/swagger-ui.html`
 
+门户与 SSO 相关接口：
+
+- `GET /portal/apps`：返回当前用户有权访问的业务系统清单
+- `POST /portal/apps/{appKey}/authorize`：校验业务系统访问权限，签发短期 SSO 票据，返回 `/systems/{appKey}?ticket=...` 独立系统入口，并记录 `APP_ACCESS` 日志
+- `POST /portal/sso/tickets/{ticket}/verify`：独立业务系统页校验 SSO 票据，成功后免密进入系统
+
 MySQL 初始化说明：
 
 - `scripts/bootstrap-mysql.sh` 会创建数据库、应用账号和完整表结构
@@ -69,8 +79,12 @@ npm run dev
 
 - `http://localhost:5173`
 
-登录后可在工作台内直接访问：
+登录后进入统一门户，可直接免密访问：
 
+- `http://localhost:5173/systems/oa?ticket=...`
+- `http://localhost:5173/systems/warehouse?ticket=...`
+- `http://localhost:5173/systems/finance?ticket=...`
+- `http://localhost:5173/systems/performance?ticket=...`
 - `http://localhost:5173/docs`
 - `http://localhost:5173/logs`
 
@@ -79,6 +93,12 @@ npm run dev
 - 管理员：`admin / Admin@123`
 - 部门经理：`manager / Manager@123`
 - 普通员工：`employee / Employee@123`
+
+门户可见范围：
+
+- 管理员：全部业务系统、权限中心、操作日志、接口文档
+- 部门经理：OA、仓库、财务、业绩审批（系统内包含审批队列）
+- 普通员工：OA、仓库、财务、个人业绩台账
 
 ## 说明
 
