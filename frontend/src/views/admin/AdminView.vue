@@ -31,6 +31,7 @@ const userDeleteConfirmOpen = ref(false)
 const departmentDeleteConfirmOpen = ref(false)
 const roleDeleteConfirmOpen = ref(false)
 const permissionDeleteConfirmOpen = ref(false)
+const expandedRolePermissionGroups = ref<Set<string>>(new Set())
 
 const userForm = reactive({
   username: '',
@@ -218,6 +219,23 @@ const permissionGroups = computed(() => {
 
   return [...knownGroups, ...unknownGroups]
 })
+
+const selectedRolePermissionIds = computed(() => new Set(roleForm.permissionIds))
+
+function isRolePermissionGroupExpanded(systemKey: string) {
+  return expandedRolePermissionGroups.value.has(systemKey)
+}
+
+function toggleRolePermissionGroup(systemKey: string) {
+  const next = new Set(expandedRolePermissionGroups.value)
+  if (next.has(systemKey)) next.delete(systemKey)
+  else next.add(systemKey)
+  expandedRolePermissionGroups.value = next
+}
+
+function rolePermissionSelectedCount(groupPermissions: Permission[]) {
+  return groupPermissions.filter((permission) => selectedRolePermissionIds.value.has(permission.id)).length
+}
 
 function permissionSystemKey(permission: Permission) {
   return normalizePermissionSystem(permission.resource, permission.code)
@@ -699,7 +717,7 @@ onMounted(loadAll)
         </div>
       </section>
 
-      <section class="surface editor-pane fade-rise" style="animation-delay: 120ms">
+      <section class="surface editor-pane role-editor-pane fade-rise" style="animation-delay: 120ms">
         <div class="panel-head">
           <div>
             <span class="eyebrow">Role Editor</span>
@@ -708,7 +726,7 @@ onMounted(loadAll)
           <button v-if="selectedRole" class="button button-secondary" @click="roleDeleteConfirmOpen = true">删除</button>
         </div>
 
-        <div class="editor-form">
+        <div class="editor-form role-editor-form">
           <div class="field two-up">
             <div class="field">
               <label>角色编码</label>
@@ -723,16 +741,26 @@ onMounted(loadAll)
             <label>描述</label>
             <textarea v-model="roleForm.description" rows="4"></textarea>
           </div>
-          <div class="permission-group-stack">
+          <div class="permission-group-stack role-permission-stack">
             <section v-for="group in permissionGroups" :key="group.system.key" class="permission-group">
-              <div class="permission-group-head">
+              <button
+                class="permission-group-head role-group-toggle"
+                type="button"
+                :aria-expanded="isRolePermissionGroupExpanded(group.system.key)"
+                @click="toggleRolePermissionGroup(group.system.key)"
+              >
                 <div>
                   <strong>{{ group.system.name }}</strong>
                   <span>{{ group.system.description }}</span>
                 </div>
-                <small>{{ group.permissions.length }} 项功能</small>
-              </div>
-              <div class="selector-grid compact">
+                <span class="role-group-meta">
+                  <small>{{ rolePermissionSelectedCount(group.permissions) }} / {{ group.permissions.length }} 已选</small>
+                  <span class="role-group-caret" aria-hidden="true">
+                    {{ isRolePermissionGroupExpanded(group.system.key) ? '-' : '+' }}
+                  </span>
+                </span>
+              </button>
+              <div v-if="isRolePermissionGroupExpanded(group.system.key)" class="selector-grid compact role-permission-items">
                 <label v-for="permission in group.permissions" :key="permission.id" class="selector-row">
                   <input v-model="roleForm.permissionIds" type="checkbox" :value="permission.id" />
                   <div>
@@ -1009,6 +1037,7 @@ onMounted(loadAll)
   display: grid;
   grid-template-columns: 0.82fr 1.18fr;
   gap: 1rem;
+  align-items: start;
 }
 
 .list-pane,
@@ -1016,6 +1045,13 @@ onMounted(loadAll)
 .logs-pane {
   border-radius: 28px;
   padding: 1.25rem;
+}
+
+.role-editor-pane {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  max-height: calc(100vh - 10.5rem);
+  overflow: hidden;
 }
 
 .panel-head {
@@ -1112,6 +1148,68 @@ onMounted(loadAll)
 .editor-form {
   display: grid;
   gap: 1rem;
+}
+
+.role-editor-form {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  min-height: 0;
+}
+
+.role-permission-stack {
+  min-height: 0;
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
+.role-group-toggle {
+  width: 100%;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease;
+}
+
+.role-group-toggle:hover {
+  background: rgba(180, 104, 60, 0.08);
+}
+
+.role-group-toggle:focus-visible {
+  outline: 2px solid rgba(180, 104, 60, 0.42);
+  outline-offset: 2px;
+}
+
+.role-group-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-left: auto;
+  margin-top: 0;
+}
+
+.role-group-caret {
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: rgba(23, 22, 26, 0.08);
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1;
+  margin-top: 0;
+}
+
+.role-group-toggle[aria-expanded="true"] .role-group-caret {
+  background: var(--ink);
+  color: #fff8f2;
+}
+
+.role-permission-items {
+  padding-bottom: 0.25rem;
 }
 
 .guide-grid {
@@ -1221,6 +1319,18 @@ onMounted(loadAll)
   .admin-grid {
     grid-template-columns: 1fr;
   }
+
+  .role-editor-pane {
+    display: block;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .role-permission-stack {
+    overflow: visible;
+    padding-right: 0;
+  }
+
 }
 
 @media (max-width: 720px) {
@@ -1257,6 +1367,12 @@ onMounted(loadAll)
   .selector-row small {
     margin-left: 0;
     white-space: normal;
+  }
+
+  .role-group-meta {
+    justify-content: space-between;
+    margin-left: 0;
+    width: 100%;
   }
 
   .guide-example {
