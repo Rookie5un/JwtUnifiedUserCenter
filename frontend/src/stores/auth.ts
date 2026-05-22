@@ -2,6 +2,7 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { api } from '@/api/service'
+import { clearTokens } from '@/api/client'
 import { usePortalStore } from '@/stores/portal'
 import type { LoginPayload, RegisterPayload, User } from '@/types'
 
@@ -19,6 +20,8 @@ export const useAuthStore = defineStore('auth', () => {
   const canManageRoles = computed(() => hasPermission('ROLE_MANAGE'))
   const canManagePermissions = computed(() => hasPermission('PERMISSION_MANAGE'))
   const canViewLogs = computed(() => hasPermission('LOG_VIEW'))
+  const canViewDocs = computed(() => isAdmin.value || hasPermission('DOCS_VIEW'))
+  const canAccessPerformanceSystem = computed(() => hasPermission('PERFORMANCE_ACCESS'))
   const canViewOwnPerformance = computed(() =>
     hasAnyPermission(['PERFORMANCE_VIEW_SELF', 'PERFORMANCE_VIEW_DEPARTMENT', 'PERFORMANCE_VIEW_GLOBAL']),
   )
@@ -28,6 +31,7 @@ export const useAuthStore = defineStore('auth', () => {
   )
   const canViewGlobalPerformance = computed(() => hasPermission('PERFORMANCE_VIEW_GLOBAL'))
   const canAccessRecordsPage = computed(() =>
+    canAccessPerformanceSystem.value &&
     hasAnyPermission([
       'PERFORMANCE_VIEW_SELF',
       'PERFORMANCE_VIEW_DEPARTMENT',
@@ -37,7 +41,9 @@ export const useAuthStore = defineStore('auth', () => {
       'PERFORMANCE_DELETE_SELF',
     ]),
   )
-  const canAccessApprovals = computed(() => canApprovePerformance.value && canViewDepartmentPerformance.value)
+  const canAccessApprovals = computed(() =>
+    canAccessPerformanceSystem.value && canApprovePerformance.value && canViewDepartmentPerformance.value,
+  )
   const canAccessAdminConsole = computed(() =>
     hasAnyPermission(['USER_MANAGE', 'ROLE_MANAGE', 'PERMISSION_MANAGE', 'LOG_VIEW']),
   )
@@ -60,7 +66,9 @@ export const useAuthStore = defineStore('auth', () => {
       await usePortalStore().loadApps(user.value.id)
     } catch {
       user.value = null
+      clearTokens()
       usePortalStore().reset()
+      throw new Error('登录状态已失效，请重新登录。')
     }
   }
 
@@ -108,6 +116,8 @@ export const useAuthStore = defineStore('auth', () => {
     canManageRoles,
     canManagePermissions,
     canViewLogs,
+    canViewDocs,
+    canAccessPerformanceSystem,
     canViewOwnPerformance,
     canApprovePerformance,
     canViewDepartmentPerformance,

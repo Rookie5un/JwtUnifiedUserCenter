@@ -52,12 +52,14 @@ public class PerformanceService {
     @Transactional(readOnly = true)
     public List<PerformanceRecordResponse> listRecords() {
         UserAccount actor = accessService.currentUser();
+        requirePerformanceAccess(actor);
         return visibleRecords(actor).stream().map(MapperUtils::toPerformanceRecordResponse).toList();
     }
 
     @Transactional
     public PerformanceRecordResponse createRecord(PerformanceRecordRequest request) {
         UserAccount actor = accessService.currentUser();
+        requirePerformanceAccess(actor);
         accessService.requirePermission(actor, PermissionCodes.PERFORMANCE_CREATE);
         PerformanceRecord record = new PerformanceRecord();
         record.setOwner(actor);
@@ -71,6 +73,7 @@ public class PerformanceService {
     @Transactional
     public PerformanceRecordResponse updateRecord(Long recordId, PerformanceRecordRequest request) {
         UserAccount actor = accessService.currentUser();
+        requirePerformanceAccess(actor);
         accessService.requirePermission(actor, PermissionCodes.PERFORMANCE_EDIT_SELF);
         PerformanceRecord record = findRecord(recordId);
         if (!record.getOwner().getId().equals(actor.getId())) {
@@ -92,6 +95,7 @@ public class PerformanceService {
     @Transactional
     public void deleteRecord(Long recordId) {
         UserAccount actor = accessService.currentUser();
+        requirePerformanceAccess(actor);
         accessService.requirePermission(actor, PermissionCodes.PERFORMANCE_DELETE_SELF);
         PerformanceRecord record = findRecord(recordId);
         if (!record.getOwner().getId().equals(actor.getId())) {
@@ -107,6 +111,7 @@ public class PerformanceService {
     @Transactional(readOnly = true)
     public List<PerformanceRecordResponse> pendingApprovals() {
         UserAccount actor = accessService.currentUser();
+        requirePerformanceAccess(actor);
         accessService.requirePermission(actor, PermissionCodes.PERFORMANCE_APPROVE);
         List<PerformanceRecord> records = canViewGlobal(actor)
             ? performanceRecordRepository.findByStatusOrderByCreatedAtAsc(PerformanceStatus.PENDING)
@@ -119,6 +124,7 @@ public class PerformanceService {
     @Transactional
     public PerformanceRecordResponse approve(Long recordId) {
         UserAccount actor = accessService.currentUser();
+        requirePerformanceAccess(actor);
         PerformanceRecord record = enforceApprovalScope(actor, findRecord(recordId));
         record.setStatus(PerformanceStatus.APPROVED);
         record.setRejectedReason(null);
@@ -133,6 +139,7 @@ public class PerformanceService {
     @Transactional
     public PerformanceRecordResponse reject(Long recordId, ApprovalDecisionRequest request) {
         UserAccount actor = accessService.currentUser();
+        requirePerformanceAccess(actor);
         if (request.reason() == null || request.reason().isBlank()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "REASON_REQUIRED", "Reject reason is required.");
         }
@@ -150,6 +157,7 @@ public class PerformanceService {
     @Transactional(readOnly = true)
     public DashboardResponse personalDashboard() {
         UserAccount actor = accessService.currentUser();
+        requirePerformanceAccess(actor);
         accessService.requireAnyPermission(actor,
             PermissionCodes.PERFORMANCE_VIEW_SELF,
             PermissionCodes.PERFORMANCE_VIEW_DEPARTMENT,
@@ -160,6 +168,7 @@ public class PerformanceService {
     @Transactional(readOnly = true)
     public DashboardResponse departmentDashboard() {
         UserAccount actor = accessService.currentUser();
+        requirePerformanceAccess(actor);
         accessService.requireAnyPermission(actor, PermissionCodes.PERFORMANCE_VIEW_DEPARTMENT, PermissionCodes.PERFORMANCE_VIEW_GLOBAL);
         return dashboard("department", performanceRecordRepository.findByDepartmentOrderByOccurredOnDescCreatedAtDesc(actor.getDepartment()));
     }
@@ -167,6 +176,7 @@ public class PerformanceService {
     @Transactional(readOnly = true)
     public DashboardResponse globalDashboard() {
         UserAccount actor = accessService.currentUser();
+        requirePerformanceAccess(actor);
         accessService.requirePermission(actor, PermissionCodes.PERFORMANCE_VIEW_GLOBAL);
         return dashboard("global", performanceRecordRepository.findAllByOrderByOccurredOnDescCreatedAtDesc());
     }
@@ -191,6 +201,10 @@ public class PerformanceService {
     private PerformanceRecord findRecord(Long recordId) {
         return performanceRecordRepository.findById(recordId)
             .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "RECORD_NOT_FOUND", "Performance record not found."));
+    }
+
+    private void requirePerformanceAccess(UserAccount actor) {
+        accessService.requirePermission(actor, PermissionCodes.PERFORMANCE_ACCESS);
     }
 
     private PerformanceRecord enforceApprovalScope(UserAccount actor, PerformanceRecord record) {
@@ -228,6 +242,7 @@ public class PerformanceService {
 
     private List<PerformanceRecord> scopedRecords(String scope) {
         UserAccount actor = accessService.currentUser();
+        requirePerformanceAccess(actor);
         return switch (scope == null ? "personal" : scope) {
             case "department" -> {
                 accessService.requireAnyPermission(actor, PermissionCodes.PERFORMANCE_VIEW_DEPARTMENT, PermissionCodes.PERFORMANCE_VIEW_GLOBAL);

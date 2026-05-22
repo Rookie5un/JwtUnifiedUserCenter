@@ -57,11 +57,58 @@ const roleForm = reactive({
 const permissionForm = reactive({
   code: '',
   name: '',
-  resource: '',
   action: '',
   type: 'API' as Permission['type'],
   description: '',
 })
+
+type PermissionSystem = {
+  key: string
+  name: string
+  shortName: string
+  description: string
+}
+
+const permissionSystems: PermissionSystem[] = [
+  {
+    key: 'performance',
+    name: '业绩审批系统',
+    shortName: '业务审批',
+    description: '业绩台账、审批队列、操作日志和接口文档。',
+  },
+  {
+    key: 'permission',
+    name: '权限中心',
+    shortName: '统一用户中心',
+    description: '用户、角色、权限与组织治理。',
+  },
+  {
+    key: 'oa',
+    name: 'OA 协同办公系统',
+    shortName: '协同办公',
+    description: '待办、流程、公告和办公申请。',
+  },
+  {
+    key: 'warehouse',
+    name: '仓库管理系统',
+    shortName: '供应链',
+    description: '库存、入库出库、调拨和异常预警。',
+  },
+  {
+    key: 'finance',
+    name: '财务管理系统',
+    shortName: '财务运营',
+    description: '报销、付款、预算和凭证查询。',
+  },
+  {
+    key: 'portal',
+    name: '集成门户',
+    shortName: '门户',
+    description: '业务系统目录、SSO 授权和系统访问。',
+  },
+]
+const permissionSystemMap = new Map(permissionSystems.map((system) => [system.key, system]))
+const selectedPermissionSystemKey = ref(permissionSystems[0].key)
 
 const selectedUser = computed(() => users.value.find((item) => item.id === selectedUserId.value) ?? null)
 const selectedDepartment = computed(() => departments.value.find((item) => item.id === selectedDepartmentId.value) ?? null)
@@ -69,16 +116,16 @@ const selectedRole = computed(() => roles.value.find((item) => item.id === selec
 const selectedPermission = computed(() => permissions.value.find((item) => item.id === selectedPermissionId.value) ?? null)
 const permissionRules = [
   {
+    title: '系统大类',
+    detail: '先选所属系统，例如业绩审批系统、权限中心、OA、仓库或财务，权限列表会按系统归档。',
+  },
+  {
+    title: '功能小类',
+    detail: '每个系统先配置“进入系统”，再配置系统内功能，例如个人台账、审批队列、操作日志或接口文档。',
+  },
+  {
     title: '编码规则',
-    detail: 'code 建议使用全大写下划线，表达“资源 + 能力”，例如 PERFORMANCE_CREATE、USER_MANAGE。',
-  },
-  {
-    title: '资源字段',
-    detail: 'resource 填资源归属，如 performance、user、role、permission、logs。',
-  },
-  {
-    title: '动作字段',
-    detail: 'action 填动作和范围，如 create、read:self、read:department、manage、approve。',
+    detail: 'code 建议使用全大写下划线，表达“系统 + 功能 + 能力”，例如 OA_ACCESS、PERFORMANCE_CREATE。',
   },
   {
     title: '类型选择',
@@ -86,6 +133,13 @@ const permissionRules = [
   },
 ]
 const permissionExamples = [
+  {
+    code: 'OA_ACCESS',
+    resource: 'oa',
+    action: 'system:access',
+    type: 'MENU',
+    note: '允许角色在集成门户进入 OA 系统',
+  },
   {
     code: 'PERFORMANCE_CREATE',
     resource: 'performance',
@@ -102,10 +156,17 @@ const permissionExamples = [
   },
   {
     code: 'USER_MANAGE',
-    resource: 'user',
-    action: 'manage',
+    resource: 'permission',
+    action: 'user:manage',
     type: 'MENU',
     note: '用户管理、分配角色、重置密码',
+  },
+  {
+    code: 'DOCS_VIEW',
+    resource: 'performance',
+    action: 'docs:read',
+    type: 'MENU',
+    note: '业务审批系统内查看接口文档',
   },
 ]
 const availableTabs = computed(() =>
@@ -119,6 +180,80 @@ const availableTabs = computed(() =>
 )
 const canLoadRoles = computed(() => auth.canManageUsers || auth.canManageRoles)
 const canLoadPermissions = computed(() => auth.canManageRoles || auth.canManagePermissions)
+const permissionGroups = computed(() => {
+  const groups = new Map<string, Permission[]>()
+  const sortedPermissions = [...permissions.value].sort((left, right) => {
+    const systemDiff =
+      permissionSystems.findIndex((system) => system.key === permissionSystemKey(left)) -
+      permissionSystems.findIndex((system) => system.key === permissionSystemKey(right))
+    if (systemDiff !== 0) return systemDiff
+    return permissionSortValue(left).localeCompare(permissionSortValue(right))
+  })
+
+  sortedPermissions.forEach((permission) => {
+    const key = permissionSystemKey(permission)
+    const items = groups.get(key) ?? []
+    items.push(permission)
+    groups.set(key, items)
+  })
+
+  const knownGroups = permissionSystems
+    .map((system) => ({
+      system,
+      permissions: groups.get(system.key) ?? [],
+    }))
+    .filter((group) => group.permissions.length || group.system.key === selectedPermissionSystemKey.value)
+
+  const unknownGroups = [...groups.entries()]
+    .filter(([key]) => !permissionSystemMap.has(key))
+    .map(([key, items]) => ({
+      system: {
+        key,
+        name: `${key} 系统`,
+        shortName: key,
+        description: '自定义业务系统权限。',
+      },
+      permissions: items,
+    }))
+
+  return [...knownGroups, ...unknownGroups]
+})
+
+function permissionSystemKey(permission: Permission) {
+  return normalizePermissionSystem(permission.resource, permission.code)
+}
+
+function normalizePermissionSystem(resource: string, code = '') {
+  const normalized = resource.trim().toLowerCase()
+  if (['performance', 'logs', 'audit', 'docs', 'api-docs'].includes(normalized)) return 'performance'
+  if (['user', 'role', 'permission', 'department', 'auth'].includes(normalized)) return 'permission'
+  if (code === 'OA_ACCESS') return 'oa'
+  if (code === 'WAREHOUSE_ACCESS') return 'warehouse'
+  if (code === 'FINANCE_ACCESS') return 'finance'
+  if (code === 'PERFORMANCE_ACCESS' || code === 'LOG_VIEW' || code === 'DOCS_VIEW') return 'performance'
+  if (code === 'PERMISSION_CENTER_ACCESS') return 'permission'
+  if (code === 'USER_MANAGE' || code === 'ROLE_MANAGE' || code === 'PERMISSION_MANAGE') return 'permission'
+  return permissionSystemMap.has(normalized) ? normalized : normalized || permissionSystems[0].key
+}
+
+function permissionFeatureAction(permission: Permission) {
+  if (permission.code.endsWith('_ACCESS') || permission.action === 'system:access') return '进入系统'
+  if (permission.code === 'LOG_VIEW') return 'audit:read'
+  if (permission.code === 'DOCS_VIEW') return 'docs:read'
+  if (
+    ['user', 'role', 'permission', 'department'].includes(permission.resource) &&
+    !permission.action.includes(':')
+  ) {
+    return `${permission.resource}:${permission.action}`
+  }
+  return permission.action
+}
+
+function permissionSortValue(permission: Permission) {
+  const isSystemAccess = permission.code.endsWith('_ACCESS') || permission.action === 'system:access'
+  const action = permissionFeatureAction(permission)
+  return isSystemAccess ? `0-${permission.code}` : `1-${action}-${permission.code}`
+}
 
 function syncActiveTab() {
   if (!availableTabs.value.some((item) => item.key === tab.value)) {
@@ -232,7 +367,7 @@ function hydratePermission(permission: Permission | null) {
   selectedPermissionId.value = permission?.id ?? null
   permissionForm.code = permission?.code ?? ''
   permissionForm.name = permission?.name ?? ''
-  permissionForm.resource = permission?.resource ?? ''
+  selectedPermissionSystemKey.value = permission ? permissionSystemKey(permission) : permissionSystems[0].key
   permissionForm.action = permission?.action ?? ''
   permissionForm.type = permission?.type ?? 'API'
   permissionForm.description = permission?.description ?? ''
@@ -327,7 +462,7 @@ async function savePermission() {
   const payload = {
     code: permissionForm.code,
     name: permissionForm.name,
-    resource: permissionForm.resource,
+    resource: selectedPermissionSystemKey.value,
     action: permissionForm.action,
     type: permissionForm.type,
     description: permissionForm.description,
@@ -559,7 +694,7 @@ onMounted(loadAll)
               <strong>{{ item.name }}</strong>
               <span>{{ item.code }}</span>
             </div>
-            <small>{{ item.permissions.length }} 权限</small>
+            <small>{{ item.permissions.length }} 项权限</small>
           </button>
         </div>
       </section>
@@ -588,14 +723,26 @@ onMounted(loadAll)
             <label>描述</label>
             <textarea v-model="roleForm.description" rows="4"></textarea>
           </div>
-          <div class="selector-grid">
-            <label v-for="permission in permissions" :key="permission.id" class="selector-row">
-              <input v-model="roleForm.permissionIds" type="checkbox" :value="permission.id" />
-              <div>
-                <strong>{{ permission.name }}</strong>
-                <span>{{ permission.code }}</span>
+          <div class="permission-group-stack">
+            <section v-for="group in permissionGroups" :key="group.system.key" class="permission-group">
+              <div class="permission-group-head">
+                <div>
+                  <strong>{{ group.system.name }}</strong>
+                  <span>{{ group.system.description }}</span>
+                </div>
+                <small>{{ group.permissions.length }} 项功能</small>
               </div>
-            </label>
+              <div class="selector-grid compact">
+                <label v-for="permission in group.permissions" :key="permission.id" class="selector-row">
+                  <input v-model="roleForm.permissionIds" type="checkbox" :value="permission.id" />
+                  <div>
+                    <strong>{{ permission.name }}</strong>
+                    <span>{{ permission.code }} · {{ permissionFeatureAction(permission) }}</span>
+                  </div>
+                  <small>{{ permission.type }}</small>
+                </label>
+              </div>
+            </section>
           </div>
           <button class="button button-primary" @click="saveRole">保存角色</button>
         </div>
@@ -606,28 +753,39 @@ onMounted(loadAll)
       <section class="surface list-pane fade-rise" style="animation-delay: 60ms">
         <div class="panel-head">
           <div>
-            <span class="eyebrow">Permission Set</span>
-            <h3>权限定义</h3>
+            <span class="eyebrow">Permission Matrix</span>
+            <h3>系统权限</h3>
           </div>
           <div class="head-actions">
             <button class="button button-secondary" @click="permissionGuideOpen = true">推荐规则</button>
             <button class="button button-secondary" @click="hydratePermission(null)">新建</button>
           </div>
         </div>
-        <div class="list-stack">
-          <button
-            v-for="item in permissions"
-            :key="item.id"
-            class="entity-row"
-            :class="{ active: selectedPermission?.id === item.id }"
-            @click="hydratePermission(item)"
-          >
-            <div>
-              <strong>{{ item.name }}</strong>
-              <span>{{ item.code }}</span>
+        <div class="permission-tree">
+          <section v-for="group in permissionGroups" :key="group.system.key" class="permission-system">
+            <div class="permission-system-head">
+              <div>
+                <strong>{{ group.system.name }}</strong>
+                <span>{{ group.system.shortName }}</span>
+              </div>
+              <small>{{ group.permissions.length }}</small>
             </div>
-            <small>{{ item.type }}</small>
-          </button>
+            <div class="list-stack">
+              <button
+                v-for="item in group.permissions"
+                :key="item.id"
+                class="entity-row permission-row"
+                :class="{ active: selectedPermission?.id === item.id }"
+                @click="hydratePermission(item)"
+              >
+                <div>
+                  <strong>{{ item.name }}</strong>
+                  <span>{{ item.code }} · {{ permissionFeatureAction(item) }}</span>
+                </div>
+                <small>{{ item.type }}</small>
+              </button>
+            </div>
+          </section>
         </div>
       </section>
 
@@ -653,14 +811,21 @@ onMounted(loadAll)
           </div>
           <div class="field two-up">
             <div class="field">
-              <label>资源</label>
-              <input v-model="permissionForm.resource" />
+              <label>所属系统</label>
+              <select v-model="selectedPermissionSystemKey">
+                <option v-for="system in permissionSystems" :key="system.key" :value="system.key">
+                  {{ system.name }}
+                </option>
+              </select>
             </div>
             <div class="field">
-              <label>动作</label>
-              <input v-model="permissionForm.action" />
+              <label>功能动作</label>
+              <input v-model="permissionForm.action" placeholder="例如 records:create / approve / docs:read" />
             </div>
           </div>
+          <p class="muted system-hint">
+            当前会归入 {{ permissionSystemMap.get(selectedPermissionSystemKey)?.name }}，作为该系统下的具体功能权限。
+          </p>
           <div class="field">
             <label>类型</label>
             <select v-model="permissionForm.type">
@@ -723,7 +888,7 @@ onMounted(loadAll)
             <strong>{{ example.code }}</strong>
             <span>{{ example.note }}</span>
           </div>
-          <small>{{ example.resource }} · {{ example.action }} · {{ example.type }}</small>
+          <small>{{ permissionSystemMap.get(example.resource)?.name ?? example.resource }} · {{ example.action }} · {{ example.type }}</small>
         </div>
       </div>
 
@@ -872,6 +1037,49 @@ onMounted(loadAll)
   gap: 0.85rem;
 }
 
+.permission-tree,
+.permission-group-stack {
+  display: grid;
+  gap: 0.95rem;
+}
+
+.permission-system,
+.permission-group {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.permission-system-head,
+.permission-group-head {
+  padding: 0.8rem 0.9rem;
+  border-radius: 18px;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  background: rgba(23, 22, 26, 0.045);
+}
+
+.permission-system-head strong,
+.permission-group-head strong {
+  display: block;
+}
+
+.permission-system-head span,
+.permission-group-head span {
+  display: block;
+  margin-top: 0.22rem;
+  color: var(--ink-soft);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.permission-system-head small,
+.permission-group-head small {
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
 .entity-row,
 .log-row {
   border: 1px solid rgba(23, 22, 26, 0.08);
@@ -895,6 +1103,10 @@ onMounted(loadAll)
   display: block;
   margin-top: 0.28rem;
   color: var(--ink-soft);
+}
+
+.permission-row {
+  margin-left: 0.55rem;
 }
 
 .editor-form {
@@ -943,7 +1155,7 @@ onMounted(loadAll)
 .guide-example small {
   color: var(--ink-soft);
   text-align: right;
-  white-space: nowrap;
+  max-width: 18rem;
 }
 
 .two-up {
@@ -955,6 +1167,10 @@ onMounted(loadAll)
 .selector-grid {
   display: grid;
   gap: 0.7rem;
+}
+
+.selector-grid.compact {
+  gap: 0.55rem;
 }
 
 .selector-row {
@@ -971,6 +1187,17 @@ onMounted(loadAll)
   display: block;
   margin-top: 0.25rem;
   color: var(--ink-soft);
+}
+
+.selector-row small {
+  margin-left: auto;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.system-hint {
+  margin: 0;
+  line-height: 1.6;
 }
 
 .log-meta {
@@ -1014,6 +1241,22 @@ onMounted(loadAll)
   .log-row {
     flex-direction: column;
     align-items: start;
+  }
+
+  .permission-row {
+    margin-left: 0;
+  }
+
+  .permission-system-head,
+  .permission-group-head,
+  .selector-row {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .selector-row small {
+    margin-left: 0;
+    white-space: normal;
   }
 
   .guide-example {

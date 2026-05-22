@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 
+import { ApiRequestError } from '@/api/client'
 import { roleLabel } from '@/composables/format'
 import { portalApps } from '@/constants/portalApps'
 import { usePortalStore } from '@/stores/portal'
 import type { PortalApp, SsoTicketVerification } from '@/types'
 
 const route = useRoute()
+const router = useRouter()
 const portal = usePortalStore()
 
 const verification = ref<SsoTicketVerification | null>(null)
@@ -19,6 +21,10 @@ const ticket = computed(() => String(route.query.ticket ?? ''))
 const fallbackApp = computed(() => portalApps.find((app) => app.key === appKey.value) ?? null)
 const app = computed<PortalApp | null>(() => portal.appByKey(appKey.value) ?? fallbackApp.value)
 const userRoles = computed(() => verification.value?.user.roles.map(roleLabel).join(' / ') || '统一用户')
+const canViewLogs = computed(() => verification.value?.user.permissions.includes('LOG_VIEW') ?? false)
+const canViewDocs = computed(() =>
+  Boolean(verification.value?.user.roles.includes('ADMIN') || verification.value?.user.permissions.includes('DOCS_VIEW')),
+)
 const canViewPerformanceApprovals = computed(() =>
   Boolean(
     verification.value?.user.permissions.includes('PERFORMANCE_APPROVE') &&
@@ -31,6 +37,8 @@ const performanceMenu = computed(() =>
     { label: '个人台账', value: '录入与维护', to: { name: 'records' }, visible: true },
     { label: '审批队列', value: '经理处理', to: { name: 'approvals' }, visible: canViewPerformanceApprovals.value },
     { label: '统计看板', value: '趋势与排行', to: null, visible: true },
+    { label: '操作日志', value: '审计留痕', to: { name: 'logs' }, visible: canViewLogs.value },
+    { label: '接口文档', value: '联调说明', to: { name: 'docs' }, visible: canViewDocs.value },
   ].filter((item) => item.visible),
 )
 
@@ -60,7 +68,7 @@ const modules = computed(() => {
     return [
       { title: '个人台账', value: '启用', detail: '业绩录入、修改和提交继续使用真实业务接口。' },
       { title: '审批流', value: 'JWT', detail: '经理角色进入审批队列时不再次登录。' },
-      { title: '统计看板', value: '实时', detail: '按权限查看个人、部门和全局数据。' },
+      { title: '业务支撑', value: '已接入', detail: '操作日志和接口文档统一放入业务审批系统内访问。' },
     ]
   }
   if (appKey.value === 'permission') {
@@ -70,17 +78,10 @@ const modules = computed(() => {
       { title: '权限点', value: '11', detail: '统一控制门户和业务接口访问。' },
     ]
   }
-  if (appKey.value === 'logs') {
-    return [
-      { title: '审计范围', value: '全局', detail: '登录、授权和业务操作统一留痕。' },
-      { title: '访问事件', value: 'APP', detail: 'SSO 进入系统会记录 APP_ACCESS。' },
-      { title: '结果', value: '成功/失败', detail: '成功和拒绝访问都可审计。' },
-    ]
-  }
   return [
-    { title: '接口规范', value: 'REST', detail: '查看统一用户中心后端接口说明。' },
-    { title: '认证方式', value: 'Bearer', detail: '接口通过 JWT 访问令牌保护。' },
-    { title: '文档状态', value: '在线', detail: '管理员可免密进入接口文档系统。' },
+    { title: '业务模块', value: '在线', detail: '当前系统已接入统一认证入口。' },
+    { title: '访问方式', value: 'SSO', detail: '通过短期票据完成业务系统免密进入。' },
+    { title: '权限校验', value: 'JWT', detail: '系统页面继续复用统一用户中心的权限模型。' },
   ]
 })
 
@@ -98,6 +99,9 @@ async function verifyTicket() {
     }
   } catch (err) {
     error.value = err instanceof Error ? err.message : '授权失效，请返回门户重新进入系统。'
+    if (err instanceof ApiRequestError && err.status === 401 && !err.code?.startsWith('SSO_TICKET')) {
+      await router.replace({ name: 'login', query: { reason: 'expired' } })
+    }
   } finally {
     loading.value = false
   }
@@ -118,7 +122,7 @@ onMounted(verifyTicket)
       <span class="eyebrow">Access Required</span>
       <h1>授权失效</h1>
       <p class="muted">{{ error || '当前系统不存在或不可访问。' }}</p>
-      <RouterLink class="button button-primary" :to="{ name: 'overview' }">返回门户</RouterLink>
+      <RouterLink class="button button-primary" :to="{ name: 'overview' }">重新进入门户</RouterLink>
     </section>
 
     <template v-else>
@@ -198,8 +202,8 @@ onMounted(verifyTicket)
       <section v-if="appKey === 'performance'" class="deep-links surface fade-rise" style="animation-delay: 280ms">
         <div>
           <span class="eyebrow">Real Business Demo</span>
-          <h2>进入真实业绩功能</h2>
-          <p class="muted">以下入口继续复用当前浏览器登录态，不需要再次输入密码。</p>
+          <h2>业务审批工作区</h2>
+          <p class="muted">以下入口继续复用当前浏览器登录态，日志和接口文档也从这里进入。</p>
         </div>
         <div class="deep-actions">
           <RouterLink class="button button-primary" :to="{ name: 'records' }">个人业绩台账</RouterLink>
@@ -210,11 +214,17 @@ onMounted(verifyTicket)
           >
             部门审批队列
           </RouterLink>
+          <RouterLink v-if="canViewLogs" class="button button-secondary" :to="{ name: 'logs' }">
+            操作日志
+          </RouterLink>
+          <RouterLink v-if="canViewDocs" class="button button-secondary" :to="{ name: 'docs' }">
+            接口文档
+          </RouterLink>
         </div>
       </section>
 
       <section
-        v-else-if="['permission', 'logs', 'docs'].includes(appKey)"
+        v-else-if="appKey === 'permission'"
         class="deep-links surface fade-rise"
         style="animation-delay: 280ms"
       >
@@ -224,14 +234,8 @@ onMounted(verifyTicket)
           <p class="muted">下面入口复用当前浏览器登录态，继续保持免密访问。</p>
         </div>
         <div class="deep-actions">
-          <RouterLink v-if="appKey === 'permission'" class="button button-primary" :to="{ name: 'admin' }">
+          <RouterLink class="button button-primary" :to="{ name: 'admin' }">
             权限中心控制台
-          </RouterLink>
-          <RouterLink v-if="appKey === 'logs'" class="button button-primary" :to="{ name: 'logs' }">
-            操作日志
-          </RouterLink>
-          <RouterLink v-if="appKey === 'docs'" class="button button-primary" :to="{ name: 'docs' }">
-            接口文档
           </RouterLink>
         </div>
       </section>

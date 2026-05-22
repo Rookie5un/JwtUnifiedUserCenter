@@ -1,4 +1,4 @@
-import { clearTokens, getRefreshToken, request, setTokens } from './client'
+import { clearTokens, getAccessToken, getRefreshToken, request, resolveApiUrl, setTokens } from './client'
 import type {
   AuthPayload,
   Department,
@@ -44,10 +44,15 @@ export const api = {
   async logout() {
     const refreshToken = getRefreshToken()
     if (refreshToken) {
-      await request<void>('/auth/logout', {
+      const token = getAccessToken()
+      await fetch(resolveApiUrl('/auth/logout'), {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ refreshToken }),
-      })
+      }).catch(() => undefined)
     }
     clearTokens()
   },
@@ -212,6 +217,6 @@ export const api = {
   verifySsoTicket(ticket: string) {
     return request<SsoTicketVerification>(`/portal/sso/tickets/${encodeURIComponent(ticket)}/verify`, {
       method: 'POST',
-    }, false)
+    })
   },
 }

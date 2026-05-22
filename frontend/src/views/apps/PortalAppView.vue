@@ -11,6 +11,7 @@ const portal = usePortalStore()
 
 const appKey = computed(() => String(route.params.appKey ?? ''))
 const app = computed(() => portal.appByKey(appKey.value))
+const hasSupportLinks = computed(() => auth.canViewLogs || auth.canViewDocs)
 
 const demoModules = computed(() => {
   if (appKey.value === 'oa') {
@@ -40,7 +41,7 @@ const demoModules = computed(() => {
   return [
     { title: '个人台账', value: '启用', detail: '员工录入和维护自己的业绩记录。' },
     { title: '审批流', value: auth.canAccessApprovals ? '可处理' : '无待办', detail: '经理角色可免密进入审批队列。' },
-    { title: '统计看板', value: '实时', detail: '按个人、部门、全局权限查看业绩数据。' },
+    { title: '业务支撑', value: hasSupportLinks.value ? '已接入' : '按权限隐藏', detail: '操作日志和接口文档收拢到业务审批系统内访问。' },
   ]
 })
 
@@ -105,8 +106,8 @@ const activity = computed(() => {
     <section v-if="appKey === 'performance'" class="deep-links surface fade-rise" style="animation-delay: 280ms">
       <div>
         <span class="eyebrow">Real Business Demo</span>
-        <h3>进入真实业绩功能</h3>
-        <p class="muted">下面两个入口复用现有后端接口和 JWT 权限，不需要再次输入密码。</p>
+        <h3>业务审批工作区</h3>
+        <p class="muted">业绩功能、操作日志和接口文档都从这里进入，继续复用当前登录态。</p>
       </div>
       <div class="deep-actions">
         <RouterLink v-if="auth.canAccessRecordsPage" class="button button-primary" :to="{ name: 'records' }">
@@ -114,6 +115,12 @@ const activity = computed(() => {
         </RouterLink>
         <RouterLink v-if="auth.canAccessApprovals" class="button button-secondary" :to="{ name: 'approvals' }">
           部门审批队列
+        </RouterLink>
+        <RouterLink v-if="auth.canViewLogs" class="button button-secondary" :to="{ name: 'logs' }">
+          操作日志
+        </RouterLink>
+        <RouterLink v-if="auth.canViewDocs" class="button button-secondary" :to="{ name: 'docs' }">
+          接口文档
         </RouterLink>
       </div>
     </section>

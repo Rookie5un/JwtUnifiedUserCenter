@@ -5,6 +5,19 @@ const API_ROOT = API_BASE.endsWith('/') ? API_BASE : `${API_BASE}/`
 
 const ACCESS_TOKEN_KEY = 'atlas_access_token'
 const REFRESH_TOKEN_KEY = 'atlas_refresh_token'
+export const SESSION_EXPIRED_EVENT = 'atlas-session-expired'
+
+export class ApiRequestError extends Error {
+  status: number
+  code?: string
+
+  constructor(message: string, status: number, code?: string) {
+    super(message)
+    this.name = 'ApiRequestError'
+    this.status = status
+    this.code = code
+  }
+}
 
 export function getAccessToken() {
   return localStorage.getItem(ACCESS_TOKEN_KEY)
@@ -24,8 +37,17 @@ export function clearTokens() {
   localStorage.removeItem(REFRESH_TOKEN_KEY)
 }
 
+export function notifySessionExpired(message = '登录状态已失效，请重新登录。') {
+  clearTokens()
+  window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT, { detail: { message } }))
+}
+
 export function resolveApiUrl(path: string) {
   return new URL(path.replace(/^\//, ''), API_ROOT).toString()
+}
+
+function shouldTryRefresh(error: ApiRequestError) {
+  return error.status === 401 && !error.code?.startsWith('SSO_TICKET')
 }
 
 async function rawRequest<T>(
@@ -49,7 +71,11 @@ async function rawRequest<T>(
 
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as ApiEnvelope<unknown> | null
-    throw new Error(body?.message ?? `Request failed with status ${response.status}`)
+    throw new ApiRequestError(
+      body?.message ?? `Request failed with status ${response.status}`,
+      response.status,
+      body?.code,
+    )
   }
 
   const body = (await response.json()) as ApiEnvelope<T>
@@ -61,7 +87,7 @@ let refreshing: Promise<void> | null = null
 async function tryRefresh() {
   const refreshToken = getRefreshToken()
   if (!refreshToken) {
-    throw new Error('Session expired.')
+    throw new ApiRequestError('Session expired.', 401, 'SESSION_EXPIRED')
   }
   if (!refreshing) {
     refreshing = fetch(resolveApiUrl('/auth/refresh'), {
@@ -73,7 +99,8 @@ async function tryRefresh() {
     })
       .then(async (response) => {
         if (!response.ok) {
-          throw new Error('Session expired.')
+          const body = (await response.json().catch(() => null)) as ApiEnvelope<unknown> | null
+          throw new ApiRequestError(body?.message ?? 'Session expired.', response.status, body?.code)
         }
         const body = (await response.json()) as ApiEnvelope<AuthPayload>
         setTokens(body.data)
@@ -89,10 +116,16 @@ export async function request<T>(path: string, init: RequestInit = {}, withAuth 
   try {
     return await rawRequest<T>(path, init, withAuth)
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Request failed.'
-    if (withAuth && message.includes('Authentication is required')) {
-      await tryRefresh()
-      return rawRequest<T>(path, init, withAuth)
+    if (withAuth && error instanceof ApiRequestError && shouldTryRefresh(error)) {
+      try {
+        await tryRefresh()
+        return await rawRequest<T>(path, init, withAuth)
+      } catch (refreshError) {
+        if (refreshError instanceof ApiRequestError && shouldTryRefresh(refreshError)) {
+          notifySessionExpired()
+        }
+        throw refreshError
+      }
     }
     throw error
   }

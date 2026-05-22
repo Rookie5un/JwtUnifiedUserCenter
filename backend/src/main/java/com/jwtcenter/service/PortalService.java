@@ -31,7 +31,7 @@ public class PortalService {
             "portal-app",
             Map.of("appKey", "oa"),
             List.of(),
-            List.of(),
+            List.of("OA_ACCESS"),
             "demo",
             "协同办公",
             "#2f6f73",
@@ -50,7 +50,7 @@ public class PortalService {
             "standalone-system",
             Map.of("appKey", "permission"),
             List.of(),
-            List.of("USER_MANAGE", "ROLE_MANAGE", "PERMISSION_MANAGE"),
+            List.of("PERMISSION_CENTER_ACCESS"),
             "online",
             "统一用户中心",
             "#6b5b95",
@@ -69,7 +69,7 @@ public class PortalService {
             "portal-app",
             Map.of("appKey", "warehouse"),
             List.of(),
-            List.of(),
+            List.of("WAREHOUSE_ACCESS"),
             "demo",
             "供应链",
             "#4d6b42",
@@ -88,7 +88,7 @@ public class PortalService {
             "portal-app",
             Map.of("appKey", "finance"),
             List.of(),
-            List.of(),
+            List.of("FINANCE_ACCESS"),
             "demo",
             "财务运营",
             "#9a6a2f",
@@ -102,58 +102,20 @@ public class PortalService {
             "performance",
             "业绩审批系统",
             "业绩",
-            "复用现有业绩录入、审批、统计看板作为真实业务示例。",
+            "复用现有业绩录入、审批、统计看板，并收拢审计与接口文档入口。",
             "绩",
             "portal-app",
             Map.of("appKey", "performance"),
             List.of(),
-            List.of("PERFORMANCE_VIEW_SELF"),
+            List.of("PERFORMANCE_ACCESS"),
             "online",
             "业务审批",
             "#b4683c",
             List.of(
                 new PortalMetricResponse("个人台账", "启用"),
-                new PortalMetricResponse("审批流", "JWT")
+                new PortalMetricResponse("支撑入口", "日志/接口")
             ),
             "/systems/performance"
-        ),
-        new PortalAppDefinition(
-            "logs",
-            "操作日志系统",
-            "日志",
-            "审计登录、授权、业务操作和系统访问记录。",
-            "志",
-            "standalone-system",
-            Map.of("appKey", "logs"),
-            List.of(),
-            List.of("LOG_VIEW"),
-            "online",
-            "安全审计",
-            "#3d5872",
-            List.of(
-                new PortalMetricResponse("审计范围", "全局"),
-                new PortalMetricResponse("登录事件", "记录")
-            ),
-            "/systems/logs"
-        ),
-        new PortalAppDefinition(
-            "docs",
-            "接口文档系统",
-            "接口",
-            "查看 RESTful API、JWT 鉴权和后端接口说明。",
-            "API",
-            "standalone-system",
-            Map.of("appKey", "docs"),
-            List.of("ADMIN"),
-            List.of(),
-            "online",
-            "开发支撑",
-            "#4c6171",
-            List.of(
-                new PortalMetricResponse("接口规范", "REST"),
-                new PortalMetricResponse("认证方式", "Bearer")
-            ),
-            "/systems/docs"
         )
     );
 
@@ -201,20 +163,23 @@ public class PortalService {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "SSO_TICKET_REQUIRED", "SSO ticket is required.");
         }
 
+        UserAccount currentUser = accessService.currentUser();
         SsoTicket existing = tickets.get(ticket);
         Instant now = Instant.now();
         if (existing == null || existing.expiresAt().isBefore(now)) {
             tickets.remove(ticket);
             throw new ApiException(HttpStatus.UNAUTHORIZED, "SSO_TICKET_INVALID", "SSO ticket is invalid or expired.");
         }
+        if (!existing.userId().equals(currentUser.getId())) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "SSO_TICKET_USER_MISMATCH", "SSO ticket does not belong to the current user.");
+        }
 
-        UserAccount user = accessService.userById(existing.userId());
         PortalAppDefinition app = APPS.stream()
             .filter(item -> item.key().equals(existing.appKey()))
             .findFirst()
             .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "APP_NOT_FOUND", "Business system does not exist."));
 
-        if (!canAccess(user, app)) {
+        if (!canAccess(currentUser, app)) {
             throw new ApiException(HttpStatus.FORBIDDEN, "APP_ACCESS_DENIED", "You do not have access to this business system.");
         }
 
@@ -225,12 +190,12 @@ public class PortalService {
             existing.issuedAt(),
             existing.expiresAt(),
             new SsoTicketVerifyResponse.SsoUserResponse(
-                user.getId(),
-                user.getUsername(),
-                user.getDisplayName(),
-                user.getDepartment(),
-                user.getRoles().stream().map(role -> role.getCode()).sorted().toList(),
-                user.getRoles().stream()
+                currentUser.getId(),
+                currentUser.getUsername(),
+                currentUser.getDisplayName(),
+                currentUser.getDepartment(),
+                currentUser.getRoles().stream().map(role -> role.getCode()).sorted().toList(),
+                currentUser.getRoles().stream()
                     .flatMap(role -> role.getPermissions().stream())
                     .map(permission -> permission.getCode())
                     .distinct()

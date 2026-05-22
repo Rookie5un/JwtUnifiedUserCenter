@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 import { api } from '@/api/service'
 import { useAuthStore } from '@/stores/auth'
@@ -8,10 +8,15 @@ import type { Department } from '@/types'
 
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
 
 const mode = ref<'login' | 'register'>('login')
 const error = ref('')
 const departments = ref<Department[]>([])
+const redirectPath = computed(() => {
+  const redirect = route.query.redirect
+  return typeof redirect === 'string' && redirect.startsWith('/') ? redirect : ''
+})
 
 const loginForm = reactive({
   username: 'admin',
@@ -38,7 +43,7 @@ async function submit() {
   try {
     if (mode.value === 'login') {
       await auth.login(loginForm)
-      router.replace({ name: 'overview' })
+      router.replace(redirectPath.value || { name: 'overview' })
       return
     }
     await auth.register(registerForm)
@@ -68,7 +73,12 @@ async function loadDepartments() {
   }
 }
 
-onMounted(loadDepartments)
+onMounted(() => {
+  if (route.query.reason === 'expired') {
+    error.value = '登录状态已失效，请重新登录后继续访问业务系统。'
+  }
+  loadDepartments()
+})
 </script>
 
 <template>

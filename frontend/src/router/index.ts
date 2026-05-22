@@ -10,6 +10,7 @@ import AdminView from '@/views/admin/AdminView.vue'
 import PortalAppView from '@/views/apps/PortalAppView.vue'
 import StandaloneSystemView from '@/views/apps/StandaloneSystemView.vue'
 import AppShell from '@/layouts/AppShell.vue'
+import { clearTokens } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { usePortalStore } from '@/stores/portal'
 
@@ -77,8 +78,18 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
   const portal = usePortalStore()
+  if (to.name === 'login' && to.query.reason === 'expired') {
+    clearTokens()
+    auth.user = null
+    portal.reset()
+  }
+
   if (!auth.user && to.name !== 'login') {
-    await auth.bootstrap()
+    try {
+      await auth.bootstrap()
+    } catch {
+      return { name: 'login', query: { redirect: to.fullPath, reason: 'expired' } }
+    }
   }
 
   if (to.name === 'login' && auth.isAuthenticated) {
@@ -86,21 +97,21 @@ router.beforeEach(async (to) => {
   }
 
   if (to.name !== 'login' && !auth.isAuthenticated) {
-    if (to.name === 'standalone-system') return true
-    return { name: 'login' }
-  }
-
-  if (to.name === 'standalone-system') {
-    return true
+    return { name: 'login', query: { redirect: to.fullPath } }
   }
 
   if (to.name !== 'login' && auth.isAuthenticated) {
     try {
       await auth.refreshProfile()
     } catch {
-      await auth.logout()
-      return { name: 'login' }
+      clearTokens()
+      auth.user = null
+      return { name: 'login', query: { redirect: to.fullPath, reason: 'expired' } }
     }
+  }
+
+  if (to.name === 'standalone-system') {
+    return true
   }
 
   if (to.name === 'portal-app') {
@@ -124,7 +135,7 @@ router.beforeEach(async (to) => {
     return { name: 'overview' }
   }
 
-  if (to.meta.adminRoleOnly && !auth.isAdmin) {
+  if (to.meta.adminRoleOnly && !auth.canViewDocs) {
     return { name: 'overview' }
   }
 

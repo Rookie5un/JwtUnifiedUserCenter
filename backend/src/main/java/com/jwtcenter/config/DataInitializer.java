@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Configuration
 public class DataInitializer {
@@ -43,35 +44,48 @@ public class DataInitializer {
     ) {
         return args -> {
             syncDepartments(departmentRepository, userRepository, performanceRecordRepository, seedDemoData);
+            Map<String, Permission> permissions = syncPermissions(permissionRepository);
             if (!seedDemoData) {
                 return;
             }
 
             if (roleRepository.count() > 0 || userRepository.count() > 0) {
+                roleRepository.findByCode("ADMIN").ifPresent(adminRole -> {
+                    adminRole.getPermissions().addAll(permissions.values());
+                    roleRepository.save(adminRole);
+                });
                 return;
             }
 
-            Map<String, Permission> permissions = Map.ofEntries(
-                Map.entry("PERFORMANCE_VIEW_SELF", permission(permissionRepository, "PERFORMANCE_VIEW_SELF", "查看个人业绩", "performance", "read:self", PermissionType.API, "View personal performance records")),
-                Map.entry("PERFORMANCE_CREATE", permission(permissionRepository, "PERFORMANCE_CREATE", "录入业绩", "performance", "create", PermissionType.BUTTON, "Create performance records")),
-                Map.entry("PERFORMANCE_EDIT_SELF", permission(permissionRepository, "PERFORMANCE_EDIT_SELF", "编辑个人业绩", "performance", "update:self", PermissionType.BUTTON, "Edit own performance records")),
-                Map.entry("PERFORMANCE_DELETE_SELF", permission(permissionRepository, "PERFORMANCE_DELETE_SELF", "删除个人业绩", "performance", "delete:self", PermissionType.BUTTON, "Delete own performance records")),
-                Map.entry("PERFORMANCE_VIEW_DEPARTMENT", permission(permissionRepository, "PERFORMANCE_VIEW_DEPARTMENT", "查看部门业绩", "performance", "read:department", PermissionType.MENU, "View department performance")),
-                Map.entry("PERFORMANCE_APPROVE", permission(permissionRepository, "PERFORMANCE_APPROVE", "审批业绩", "performance", "approve", PermissionType.BUTTON, "Approve or reject performance records")),
-                Map.entry("PERFORMANCE_VIEW_GLOBAL", permission(permissionRepository, "PERFORMANCE_VIEW_GLOBAL", "查看全局业绩", "performance", "read:global", PermissionType.MENU, "View global performance")),
-                Map.entry("USER_MANAGE", permission(permissionRepository, "USER_MANAGE", "用户管理", "user", "manage", PermissionType.MENU, "Manage users")),
-                Map.entry("ROLE_MANAGE", permission(permissionRepository, "ROLE_MANAGE", "角色管理", "role", "manage", PermissionType.MENU, "Manage roles")),
-                Map.entry("PERMISSION_MANAGE", permission(permissionRepository, "PERMISSION_MANAGE", "权限管理", "permission", "manage", PermissionType.MENU, "Manage permissions")),
-                Map.entry("LOG_VIEW", permission(permissionRepository, "LOG_VIEW", "查看日志", "logs", "read", PermissionType.API, "View operation logs"))
-            );
-
             Role employeeRole = role("EMPLOYEE", "普通员工", "Self-service employee workspace", Set.of(
+                permissions.get("OA_ACCESS"),
+                permissions.get("OA_TODO_VIEW"),
+                permissions.get("OA_NOTICE_VIEW"),
+                permissions.get("WAREHOUSE_ACCESS"),
+                permissions.get("WAREHOUSE_STOCK_VIEW"),
+                permissions.get("FINANCE_ACCESS"),
+                permissions.get("FINANCE_EXPENSE_VIEW"),
+                permissions.get("FINANCE_BUDGET_VIEW"),
+                permissions.get("PERFORMANCE_ACCESS"),
                 permissions.get("PERFORMANCE_VIEW_SELF"),
                 permissions.get("PERFORMANCE_CREATE"),
                 permissions.get("PERFORMANCE_EDIT_SELF"),
                 permissions.get("PERFORMANCE_DELETE_SELF")
             ));
             Role managerRole = role("MANAGER", "部门经理", "Department manager workspace", Set.of(
+                permissions.get("OA_ACCESS"),
+                permissions.get("OA_TODO_VIEW"),
+                permissions.get("OA_PROCESS_CREATE"),
+                permissions.get("OA_NOTICE_VIEW"),
+                permissions.get("WAREHOUSE_ACCESS"),
+                permissions.get("WAREHOUSE_STOCK_VIEW"),
+                permissions.get("WAREHOUSE_INBOUND_MANAGE"),
+                permissions.get("WAREHOUSE_TRANSFER_APPROVE"),
+                permissions.get("FINANCE_ACCESS"),
+                permissions.get("FINANCE_EXPENSE_VIEW"),
+                permissions.get("FINANCE_PAYMENT_APPROVE"),
+                permissions.get("FINANCE_BUDGET_VIEW"),
+                permissions.get("PERFORMANCE_ACCESS"),
                 permissions.get("PERFORMANCE_VIEW_SELF"),
                 permissions.get("PERFORMANCE_CREATE"),
                 permissions.get("PERFORMANCE_EDIT_SELF"),
@@ -101,6 +115,54 @@ public class DataInitializer {
                 ));
             }
         };
+    }
+
+    private Map<String, Permission> syncPermissions(PermissionRepository permissionRepository) {
+        Map<String, PermissionSpec> specs = Map.ofEntries(
+            Map.entry("OA_ACCESS", new PermissionSpec("进入 OA 系统", "oa", "system:access", PermissionType.MENU, "Access OA collaboration system")),
+            Map.entry("OA_TODO_VIEW", new PermissionSpec("查看 OA 待办", "oa", "todo:read", PermissionType.API, "View OA todo items")),
+            Map.entry("OA_PROCESS_CREATE", new PermissionSpec("发起 OA 流程", "oa", "process:create", PermissionType.BUTTON, "Create OA workflow requests")),
+            Map.entry("OA_NOTICE_VIEW", new PermissionSpec("查看 OA 公告", "oa", "notice:read", PermissionType.API, "View OA notices")),
+            Map.entry("WAREHOUSE_ACCESS", new PermissionSpec("进入仓库系统", "warehouse", "system:access", PermissionType.MENU, "Access warehouse management system")),
+            Map.entry("WAREHOUSE_STOCK_VIEW", new PermissionSpec("查看库存", "warehouse", "stock:read", PermissionType.API, "View warehouse stock")),
+            Map.entry("WAREHOUSE_INBOUND_MANAGE", new PermissionSpec("入库管理", "warehouse", "inbound:manage", PermissionType.BUTTON, "Manage inbound records")),
+            Map.entry("WAREHOUSE_TRANSFER_APPROVE", new PermissionSpec("调拨审批", "warehouse", "transfer:approve", PermissionType.BUTTON, "Approve warehouse transfers")),
+            Map.entry("FINANCE_ACCESS", new PermissionSpec("进入财务系统", "finance", "system:access", PermissionType.MENU, "Access finance management system")),
+            Map.entry("FINANCE_EXPENSE_VIEW", new PermissionSpec("查看报销", "finance", "expense:read", PermissionType.API, "View finance expenses")),
+            Map.entry("FINANCE_PAYMENT_APPROVE", new PermissionSpec("付款审批", "finance", "payment:approve", PermissionType.BUTTON, "Approve finance payments")),
+            Map.entry("FINANCE_BUDGET_VIEW", new PermissionSpec("查看预算", "finance", "budget:read", PermissionType.API, "View finance budgets")),
+            Map.entry("PERFORMANCE_ACCESS", new PermissionSpec("进入业绩审批系统", "performance", "system:access", PermissionType.MENU, "Access performance approval system")),
+            Map.entry("PERMISSION_CENTER_ACCESS", new PermissionSpec("进入权限中心", "permission", "system:access", PermissionType.MENU, "Access permission center")),
+            Map.entry("PERFORMANCE_VIEW_SELF", new PermissionSpec("查看个人业绩", "performance", "read:self", PermissionType.API, "View personal performance records")),
+            Map.entry("PERFORMANCE_CREATE", new PermissionSpec("录入业绩", "performance", "create", PermissionType.BUTTON, "Create performance records")),
+            Map.entry("PERFORMANCE_EDIT_SELF", new PermissionSpec("编辑个人业绩", "performance", "update:self", PermissionType.BUTTON, "Edit own performance records")),
+            Map.entry("PERFORMANCE_DELETE_SELF", new PermissionSpec("删除个人业绩", "performance", "delete:self", PermissionType.BUTTON, "Delete own performance records")),
+            Map.entry("PERFORMANCE_VIEW_DEPARTMENT", new PermissionSpec("查看部门业绩", "performance", "read:department", PermissionType.MENU, "View department performance")),
+            Map.entry("PERFORMANCE_APPROVE", new PermissionSpec("审批业绩", "performance", "approve", PermissionType.BUTTON, "Approve or reject performance records")),
+            Map.entry("PERFORMANCE_VIEW_GLOBAL", new PermissionSpec("查看全局业绩", "performance", "read:global", PermissionType.MENU, "View global performance")),
+            Map.entry("USER_MANAGE", new PermissionSpec("用户管理", "permission", "user:manage", PermissionType.MENU, "Manage users")),
+            Map.entry("ROLE_MANAGE", new PermissionSpec("角色管理", "permission", "role:manage", PermissionType.MENU, "Manage roles")),
+            Map.entry("PERMISSION_MANAGE", new PermissionSpec("权限管理", "permission", "permission:manage", PermissionType.MENU, "Manage permissions")),
+            Map.entry("LOG_VIEW", new PermissionSpec("查看日志", "performance", "audit:read", PermissionType.API, "View operation logs")),
+            Map.entry("DOCS_VIEW", new PermissionSpec("接口文档", "performance", "docs:read", PermissionType.MENU, "View API documentation"))
+        );
+
+        return specs.entrySet().stream()
+            .collect(Collectors.toMap(
+                Map.Entry::getKey,
+                entry -> syncPermission(permissionRepository, entry.getKey(), entry.getValue())
+            ));
+    }
+
+    private Permission syncPermission(PermissionRepository repository, String code, PermissionSpec spec) {
+        Permission permission = repository.findByCode(code).orElseGet(Permission::new);
+        permission.setCode(code);
+        permission.setName(spec.name());
+        permission.setResource(spec.resource());
+        permission.setAction(spec.action());
+        permission.setType(spec.type());
+        permission.setDescription(spec.description());
+        return repository.save(permission);
     }
 
     private void syncDepartments(
@@ -139,25 +201,6 @@ public class DataInitializer {
             department.setDescription(name + " team");
             return departmentRepository.save(department);
         }));
-    }
-
-    private Permission permission(
-        PermissionRepository repository,
-        String code,
-        String name,
-        String resource,
-        String action,
-        PermissionType type,
-        String description
-    ) {
-        Permission permission = new Permission();
-        permission.setCode(code);
-        permission.setName(name);
-        permission.setResource(resource);
-        permission.setAction(action);
-        permission.setType(type);
-        permission.setDescription(description);
-        return repository.save(permission);
     }
 
     private Role role(String code, String name, String description, Set<Permission> permissions) {
@@ -214,5 +257,14 @@ public class DataInitializer {
         record.setApprovedBy(approvedBy);
         record.setApprovedAt(approvedAt);
         return record;
+    }
+
+    private record PermissionSpec(
+        String name,
+        String resource,
+        String action,
+        PermissionType type,
+        String description
+    ) {
     }
 }

@@ -12,7 +12,7 @@
 - 登录后进入集成门户首页，按角色权限展示可访问业务系统
 - 后端提供业务系统目录与 SSO 授权接口，统一记录系统访问审计日志
 - OA、仓库、财务等伪业务系统免密跳转示例
-- 业绩审批系统复用真实业务接口，演示已登录状态下的跨系统切换
+- 业绩审批系统复用真实业务接口，并收拢操作日志与接口文档入口
 - Swagger / OpenAPI 动态接口文档
 - JWT 校验与解析接口
 - 企业业绩录入、修改、删除、审批、统计、看板
@@ -85,8 +85,6 @@ npm run dev
 - `http://localhost:5173/systems/warehouse?ticket=...`
 - `http://localhost:5173/systems/finance?ticket=...`
 - `http://localhost:5173/systems/performance?ticket=...`
-- `http://localhost:5173/docs`
-- `http://localhost:5173/logs`
 
 ## 演示账号
 
@@ -96,7 +94,7 @@ npm run dev
 
 门户可见范围：
 
-- 管理员：全部业务系统、权限中心、操作日志、接口文档
+- 管理员：全部业务系统、权限中心；操作日志和接口文档从业绩审批系统内进入
 - 部门经理：OA、仓库、财务、业绩审批（系统内包含审批队列）
 - 普通员工：OA、仓库、财务、个人业绩台账
 
