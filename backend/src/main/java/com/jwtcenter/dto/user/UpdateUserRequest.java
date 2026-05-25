@@ -9,6 +9,7 @@ public record UpdateUserRequest(
     @NotBlank @Size(max = 80) String displayName,
     @Size(max = 32) String phone,
     @Email @Size(max = 120) String email,
-    @NotBlank @Size(max = 80) String department
+    Long departmentId,
+    @Size(max = 80) String department
 ) {
 }

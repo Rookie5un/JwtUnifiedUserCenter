@@ -6,9 +6,11 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.ForeignKey;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
@@ -34,8 +36,9 @@ public class UserAccount extends BaseEntity {
     @Column(length = 120)
     private String email;
 
-    @Column(nullable = false, length = 80)
-    private String department;
+    @ManyToOne(fetch = FetchType.EAGER, optional = false)
+    @JoinColumn(name = "department_id", nullable = false, foreignKey = @ForeignKey(name = "fk_users_department"))
+    private Department department;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -91,12 +94,16 @@ public class UserAccount extends BaseEntity {
         this.email = email;
     }
 
-    public String getDepartment() {
+    public Department getDepartment() {
         return department;
     }
 
-    public void setDepartment(String department) {
+    public void setDepartment(Department department) {
         this.department = department;
+    }
+
+    public String getDepartmentName() {
+        return department == null ? null : department.getName();
     }
 
     public UserStatus getStatus() {

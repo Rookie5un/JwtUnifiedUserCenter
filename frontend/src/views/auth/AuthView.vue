@@ -27,7 +27,7 @@ const registerForm = reactive({
   username: '',
   password: '',
   displayName: '',
-  department: 'East Sales',
+  departmentId: 0,
   email: '',
   phone: '',
 })
@@ -65,8 +65,8 @@ async function loadDepartments() {
   try {
     const loaded = await api.publicDepartments()
     departments.value = loaded
-    if (loaded.length && !loaded.some((department) => department.name === registerForm.department)) {
-      registerForm.department = loaded[0].name
+    if (loaded.length && !loaded.some((department) => department.id === registerForm.departmentId)) {
+      registerForm.departmentId = loaded[0].id
     }
   } catch {
     departments.value = []
@@ -128,12 +128,14 @@ onMounted(() => {
               </div>
               <div class="field">
                 <label>部门</label>
-                <select v-if="departments.length" v-model="registerForm.department">
-                  <option v-for="department in departments" :key="department.id" :value="department.name">
+                <select v-if="departments.length" v-model.number="registerForm.departmentId">
+                  <option v-for="department in departments" :key="department.id" :value="department.id">
                     {{ department.name }}
                   </option>
                 </select>
-                <input v-else v-model="registerForm.department" placeholder="例如 East Sales" />
+                <select v-else disabled>
+                  <option>暂无可选部门</option>
+                </select>
               </div>
             </div>
             <div class="field two-up">

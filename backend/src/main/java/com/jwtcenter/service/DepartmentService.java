@@ -84,7 +84,6 @@ public class DepartmentService {
             });
 
         if (!currentName.equals(nextName)) {
-            userRepository.findAllByDepartment(currentName).forEach(user -> user.setDepartment(nextName));
             performanceRecordRepository.findByDepartment(currentName).forEach(record -> record.setDepartment(nextName));
         }
 
@@ -101,7 +100,7 @@ public class DepartmentService {
         accessService.requirePermission(actor, PermissionCodes.USER_MANAGE);
         Department department = findDepartment(departmentId);
         String name = department.getName();
-        if (userRepository.countByDepartmentAndDeletedAtIsNull(name) > 0) {
+        if (userRepository.countByDepartment_IdAndDeletedAtIsNull(departmentId) > 0) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "DEPARTMENT_IN_USE", "Department is still assigned to active users.");
         }
         if (performanceRecordRepository.countByDepartment(name) > 0) {
@@ -113,10 +112,21 @@ public class DepartmentService {
 
     @Transactional(readOnly = true)
     public void requireExistingDepartment(String departmentName) {
-        String normalized = normalizedName(departmentName);
-        if (!departmentRepository.existsByName(normalized)) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "DEPARTMENT_NOT_FOUND", "Department does not exist.");
+        resolveDepartment(null, departmentName);
+    }
+
+    @Transactional(readOnly = true)
+    public Department resolveDepartment(Long departmentId, String departmentName) {
+        if (departmentId != null) {
+            return departmentRepository.findById(departmentId)
+                .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "DEPARTMENT_NOT_FOUND", "Department does not exist."));
         }
+        String normalized = normalizedName(departmentName);
+        if (normalized == null || normalized.isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "DEPARTMENT_REQUIRED", "Department is required.");
+        }
+        return departmentRepository.findByName(normalized)
+            .orElseThrow(() -> new ApiException(HttpStatus.BAD_REQUEST, "DEPARTMENT_NOT_FOUND", "Department does not exist."));
     }
 
     private Department findDepartment(Long departmentId) {

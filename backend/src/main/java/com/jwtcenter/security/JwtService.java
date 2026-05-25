@@ -38,7 +38,7 @@ public class JwtService {
             .claims(Map.of(
                 "uid", user.getId(),
                 "displayName", user.getDisplayName(),
-                "department", user.getDepartment(),
+                "department", user.getDepartmentName(),
                 "type", "ACCESS"
             ))
             .issuedAt(Date.from(now))

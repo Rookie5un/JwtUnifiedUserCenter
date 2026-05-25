@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS users (
   created_at DATETIME(6) NOT NULL,
   updated_at DATETIME(6) NOT NULL,
   deleted_at DATETIME(6) NULL,
-  department VARCHAR(80) NOT NULL,
+  department_id BIGINT NOT NULL,
   display_name VARCHAR(80) NOT NULL,
   email VARCHAR(120) NULL,
   password_hash VARCHAR(120) NOT NULL,
@@ -75,11 +75,103 @@ CREATE TABLE IF NOT EXISTS users (
   status ENUM('ACTIVE', 'DISABLED') NOT NULL,
   username VARCHAR(50) NOT NULL,
   PRIMARY KEY (id),
-  UNIQUE KEY uk_users_username (username)
+  UNIQUE KEY uk_users_username (username),
+  KEY idx_users_department_id (department_id),
+  CONSTRAINT fk_users_department FOREIGN KEY (department_id) REFERENCES departments (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 ALTER TABLE users
   ADD COLUMN IF NOT EXISTS deleted_at DATETIME(6) NULL;
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS department_id BIGINT NULL;
+
+SET @users_department_column_exists := (
+  SELECT COUNT(*)
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'users'
+    AND column_name = 'department'
+);
+
+SET @sql := IF(@users_department_column_exists > 0,
+  'INSERT INTO departments (created_at, updated_at, description, name)
+   SELECT NOW(6), NOW(6), CONCAT(source.name, '' team''), source.name
+   FROM (
+     SELECT DISTINCT TRIM(department) AS name
+     FROM users
+     WHERE department IS NOT NULL
+       AND TRIM(department) <> ''''
+   ) source
+   LEFT JOIN departments d ON d.name = source.name
+   WHERE d.id IS NULL',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(@users_department_column_exists > 0,
+  'UPDATE users u
+   JOIN departments d ON d.name = TRIM(u.department)
+   SET u.department_id = d.id
+   WHERE u.department_id IS NULL',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+INSERT INTO departments (created_at, updated_at, description, name)
+SELECT NOW(6), NOW(6), 'Unassigned team', 'Unassigned'
+WHERE EXISTS (SELECT 1 FROM users WHERE department_id IS NULL)
+  AND NOT EXISTS (SELECT 1 FROM departments WHERE name = 'Unassigned');
+
+UPDATE users
+SET department_id = (SELECT id FROM departments WHERE name = 'Unassigned')
+WHERE department_id IS NULL;
+
+ALTER TABLE users
+  MODIFY department_id BIGINT NOT NULL;
+
+SET @users_department_index_exists := (
+  SELECT COUNT(*)
+  FROM information_schema.statistics
+  WHERE table_schema = DATABASE()
+    AND table_name = 'users'
+    AND index_name = 'idx_users_department_id'
+);
+
+SET @sql := IF(@users_department_index_exists = 0,
+  'ALTER TABLE users ADD KEY idx_users_department_id (department_id)',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @users_department_fk_exists := (
+  SELECT COUNT(*)
+  FROM information_schema.referential_constraints
+  WHERE constraint_schema = DATABASE()
+    AND constraint_name = 'fk_users_department'
+);
+
+SET @sql := IF(@users_department_fk_exists = 0,
+  'ALTER TABLE users ADD CONSTRAINT fk_users_department FOREIGN KEY (department_id) REFERENCES departments (id)',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(@users_department_column_exists > 0,
+  'ALTER TABLE users DROP COLUMN department',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 CREATE TABLE IF NOT EXISTS user_roles (
   user_id BIGINT NOT NULL,

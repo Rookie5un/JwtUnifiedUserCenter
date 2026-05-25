@@ -36,7 +36,7 @@ const expandedRolePermissionGroups = ref<Set<string>>(new Set())
 const userForm = reactive({
   username: '',
   displayName: '',
-  department: '',
+  departmentId: 0,
   email: '',
   phone: '',
   roleIds: [] as number[],
@@ -358,7 +358,7 @@ function hydrateUser(user: User) {
   selectedUserId.value = user.id
   userForm.username = user.username
   userForm.displayName = user.displayName
-  userForm.department = user.department
+  userForm.departmentId = user.departmentId
   userForm.email = user.email ?? ''
   userForm.phone = user.phone ?? ''
   userForm.roleIds = roles.value.filter((role) => user.roles.includes(role.code)).map((role) => role.id)
@@ -396,7 +396,7 @@ async function saveUser() {
   await api.updateUser(selectedUser.value.id, {
     username: userForm.username,
     displayName: userForm.displayName,
-    department: userForm.department,
+    departmentId: userForm.departmentId,
     email: userForm.email,
     phone: userForm.phone,
   })
@@ -596,8 +596,8 @@ onMounted(loadAll)
           <div class="field two-up">
             <div class="field">
               <label>部门</label>
-              <select v-model="userForm.department">
-                <option v-for="department in departments" :key="department.id" :value="department.name">
+              <select v-model.number="userForm.departmentId">
+                <option v-for="department in departments" :key="department.id" :value="department.id">
                   {{ department.name }}
                 </option>
               </select>
@@ -685,7 +685,7 @@ onMounted(loadAll)
             <label>部门说明</label>
             <textarea v-model="departmentForm.description" rows="4" placeholder="补充部门职责或覆盖区域"></textarea>
           </div>
-          <p class="muted">重命名部门时，系统会同步更新该部门下的用户资料和历史业绩记录。</p>
+          <p class="muted">用户资料通过部门 ID 关联；重命名部门时，用户会自动显示新的部门名称，历史业绩记录会同步保留名称快照。</p>
           <button class="button button-primary" @click="saveDepartment">保存部门</button>
         </div>
       </section>

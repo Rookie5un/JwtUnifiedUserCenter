@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jwtcenter.entity.Permission;
 import com.jwtcenter.entity.Role;
 import com.jwtcenter.entity.UserAccount;
+import com.jwtcenter.repository.DepartmentRepository;
 import com.jwtcenter.repository.PermissionRepository;
 import com.jwtcenter.repository.PerformanceRecordRepository;
 import com.jwtcenter.repository.RoleRepository;
@@ -46,6 +47,9 @@ class JwtUnifiedUserCenterApplicationTests {
     private UserRepository userRepository;
 
     @Autowired
+    private DepartmentRepository departmentRepository;
+
+    @Autowired
     private RoleRepository roleRepository;
 
     @Autowired
@@ -56,6 +60,8 @@ class JwtUnifiedUserCenterApplicationTests {
 
     @Test
     void registerShouldCreateUserWithEncryptedPassword() throws Exception {
+        long eastSalesId = departmentId("East Sales");
+
         mockMvc.perform(post("/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
@@ -63,17 +69,20 @@ class JwtUnifiedUserCenterApplicationTests {
                       "username": "new.employee",
                       "password": "Passw0rd!",
                       "displayName": "新员工",
-                      "department": "East Sales",
+                      "departmentId": %d,
                       "email": "new.employee@atlas.local",
                       "phone": "13800000099"
                     }
-                    """))
+                    """.formatted(eastSalesId)))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.username").value("new.employee"));
+            .andExpect(jsonPath("$.data.username").value("new.employee"))
+            .andExpect(jsonPath("$.data.departmentId").value((int) eastSalesId))
+            .andExpect(jsonPath("$.data.department").value("East Sales"));
 
         UserAccount saved = userRepository.findByUsername("new.employee").orElseThrow();
         assertThat(saved.getPasswordHash()).isNotEqualTo("Passw0rd!");
         assertThat(saved.getPasswordHash()).startsWith("$2");
+        assertThat(saved.getDepartment().getId()).isEqualTo(eastSalesId);
     }
 
     @Test
@@ -99,6 +108,7 @@ class JwtUnifiedUserCenterApplicationTests {
         String accessToken = login("admin", "Admin@123");
         UserAccount employee = userRepository.findByUsername("employee").orElseThrow();
         String renamedUsername = "employee.renamed." + System.nanoTime();
+        long eastSalesId = departmentId("East Sales");
 
         mockMvc.perform(put("/users/" + employee.getId())
                 .header("Authorization", "Bearer " + accessToken)
@@ -107,16 +117,17 @@ class JwtUnifiedUserCenterApplicationTests {
                     {
                       "username": "%s",
                       "displayName": "林初",
-                      "department": "East Sales",
+                      "departmentId": %d,
                       "email": "employee@atlas.local",
                       "phone": "13800000002"
                     }
-                    """.formatted(renamedUsername)))
+                    """.formatted(renamedUsername, eastSalesId)))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.username").value(renamedUsername));
 
         UserAccount updatedUser = userRepository.findById(employee.getId()).orElseThrow();
         assertThat(updatedUser.getUsername()).isEqualTo(renamedUsername);
+        assertThat(updatedUser.getDepartment().getId()).isEqualTo(eastSalesId);
     }
 
     @Test
@@ -205,6 +216,7 @@ class JwtUnifiedUserCenterApplicationTests {
     void adminCanLogicallyDeleteUserAndRevokeTheirAccess() throws Exception {
         String adminToken = login("admin", "Admin@123");
         String username = "deleted.user." + System.nanoTime();
+        long eastSalesId = departmentId("East Sales");
 
         mockMvc.perform(post("/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -213,11 +225,11 @@ class JwtUnifiedUserCenterApplicationTests {
                       "username": "%s",
                       "password": "Passw0rd!",
                       "displayName": "待删除用户",
-                      "department": "East Sales",
+                      "departmentId": %d,
                       "email": "%s@atlas.local",
                       "phone": "13800000999"
                     }
-                    """.formatted(username, username)))
+                    """.formatted(username, eastSalesId, username)))
             .andExpect(status().isOk());
 
         UserAccount createdUser = userRepository.findByUsername(username).orElseThrow();
@@ -294,6 +306,8 @@ class JwtUnifiedUserCenterApplicationTests {
         String adminToken = login("admin", "Admin@123");
         String roleCode = "LIMITED_EDITOR_" + System.nanoTime();
         String username = "perm" + System.nanoTime();
+        long eastSalesId = departmentId("East Sales");
+        Permission performanceAccess = permissionRepository.findByCode(PermissionCodes.PERFORMANCE_ACCESS).orElseThrow();
         Permission viewSelf = permissionRepository.findByCode(PermissionCodes.PERFORMANCE_VIEW_SELF).orElseThrow();
         Permission createPerformance = permissionRepository.findByCode(PermissionCodes.PERFORMANCE_CREATE).orElseThrow();
 
@@ -320,9 +334,9 @@ class JwtUnifiedUserCenterApplicationTests {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
-                      "permissionIds": [%d, %d]
+                      "permissionIds": [%d, %d, %d]
                     }
-                    """.formatted(viewSelf.getId(), createPerformance.getId())))
+                    """.formatted(performanceAccess.getId(), viewSelf.getId(), createPerformance.getId())))
             .andExpect(status().isOk());
 
         mockMvc.perform(post("/auth/register")
@@ -332,11 +346,11 @@ class JwtUnifiedUserCenterApplicationTests {
                       "username": "%s",
                       "password": "Passw0rd!",
                       "displayName": "权限验证用户",
-                      "department": "East Sales",
+                      "departmentId": %d,
                       "email": "%s@atlas.local",
                       "phone": "13800000123"
                     }
-                    """.formatted(username, username)))
+                    """.formatted(username, eastSalesId, username)))
             .andExpect(status().isOk());
 
         UserAccount permissionUser = userRepository.findByUsername(username).orElseThrow();
@@ -369,9 +383,9 @@ class JwtUnifiedUserCenterApplicationTests {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
-                      "permissionIds": [%d]
+                      "permissionIds": [%d, %d]
                     }
-                    """.formatted(viewSelf.getId())))
+                    """.formatted(performanceAccess.getId(), viewSelf.getId())))
             .andExpect(status().isOk());
 
         mockMvc.perform(post("/performance/records")
@@ -396,7 +410,9 @@ class JwtUnifiedUserCenterApplicationTests {
                 .header("Authorization", "Bearer " + adminToken))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data[?(@.key=='permission')]").exists())
-            .andExpect(jsonPath("$.data[?(@.key=='docs')]").exists());
+            .andExpect(jsonPath("$.data[?(@.key=='performance')]").exists())
+            .andExpect(jsonPath("$.data[?(@.key=='approval')]").doesNotExist())
+            .andExpect(jsonPath("$.data[?(@.key=='docs')]").doesNotExist());
 
         String employeeToken = login("employee", "Employee@123");
         mockMvc.perform(get("/portal/apps")
@@ -475,5 +491,9 @@ class JwtUnifiedUserCenterApplicationTests {
 
         JsonNode json = objectMapper.readTree(result.getResponse().getContentAsString());
         return json.path("data").path("accessToken").asText();
+    }
+
+    private long departmentId(String name) {
+        return departmentRepository.findByName(name).orElseThrow().getId();
     }
 }

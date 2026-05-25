@@ -6,6 +6,7 @@ import com.jwtcenter.dto.auth.LoginRequest;
 import com.jwtcenter.dto.auth.RefreshTokenRequest;
 import com.jwtcenter.dto.auth.RegisterRequest;
 import com.jwtcenter.dto.user.UserResponse;
+import com.jwtcenter.entity.Department;
 import com.jwtcenter.entity.RefreshToken;
 import com.jwtcenter.entity.Role;
 import com.jwtcenter.entity.UserAccount;
@@ -69,12 +70,12 @@ public class AuthService {
         }
         Role employeeRole = roleRepository.findByCode("EMPLOYEE")
             .orElseThrow(() -> new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "ROLE_MISSING", "Default employee role is missing."));
-        departmentService.requireExistingDepartment(request.department());
+        Department department = departmentService.resolveDepartment(request.departmentId(), request.department());
         UserAccount user = new UserAccount();
         user.setUsername(request.username());
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setDisplayName(request.displayName());
-        user.setDepartment(request.department());
+        user.setDepartment(department);
         user.setEmail(request.email());
         user.setPhone(request.phone());
         user.setStatus(UserStatus.ACTIVE);

@@ -21,9 +21,7 @@ public interface UserRepository extends JpaRepository<UserAccount, Long> {
 
     List<UserAccount> findAllByDeletedAtIsNullOrderByCreatedAtDesc();
 
-    List<UserAccount> findAllByDepartment(String department);
-
-    long countByDepartmentAndDeletedAtIsNull(String department);
+    long countByDepartment_IdAndDeletedAtIsNull(Long departmentId);
 
     long countDistinctByRoles_CodeAndStatusAndDeletedAtIsNull(String roleCode, UserStatus status);
 }

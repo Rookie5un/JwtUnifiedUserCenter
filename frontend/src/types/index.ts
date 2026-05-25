@@ -12,6 +12,7 @@ export interface User {
   displayName: string
   phone?: string
   email?: string
+  departmentId: number
   department: string
   status: 'ACTIVE' | 'DISABLED'
   roles: string[]
@@ -35,7 +36,8 @@ export interface RegisterPayload {
   username: string
   password: string
   displayName: string
-  department: string
+  departmentId: number
+  department?: string
   email?: string
   phone?: string
 }
@@ -43,7 +45,8 @@ export interface RegisterPayload {
 export interface UpdateUserPayload {
   username: string
   displayName: string
-  department: string
+  departmentId: number
+  department?: string
   email?: string
   phone?: string
 }

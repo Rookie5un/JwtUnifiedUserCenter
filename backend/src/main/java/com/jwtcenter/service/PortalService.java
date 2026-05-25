@@ -193,7 +193,7 @@ public class PortalService {
                 currentUser.getId(),
                 currentUser.getUsername(),
                 currentUser.getDisplayName(),
-                currentUser.getDepartment(),
+                currentUser.getDepartmentName(),
                 currentUser.getRoles().stream().map(role -> role.getCode()).sorted().toList(),
                 currentUser.getRoles().stream()
                     .flatMap(role -> role.getPermissions().stream())

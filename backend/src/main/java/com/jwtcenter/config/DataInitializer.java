@@ -17,6 +17,7 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.math.BigDecimal;
@@ -34,6 +35,7 @@ public class DataInitializer {
 
     @Bean
     CommandLineRunner seedData(
+        JdbcTemplate jdbcTemplate,
         DepartmentRepository departmentRepository,
         PermissionRepository permissionRepository,
         RoleRepository roleRepository,
@@ -43,6 +45,7 @@ public class DataInitializer {
         @Value("${app.seed-demo-data:true}") boolean seedDemoData
     ) {
         return args -> {
+            migrateUserDepartmentIds(jdbcTemplate);
             syncDepartments(departmentRepository, userRepository, performanceRecordRepository, seedDemoData);
             Map<String, Permission> permissions = syncPermissions(permissionRepository);
             if (!seedDemoData) {
@@ -97,11 +100,15 @@ public class DataInitializer {
 
             roleRepository.saveAll(List.of(employeeRole, managerRole, adminRole));
 
-            UserAccount admin = user("admin", "Atlas 管理员", "East Sales", "admin@atlas.local", "13800000000", UserStatus.ACTIVE, passwordEncoder.encode("Admin@123"), Set.of(adminRole));
-            UserAccount manager = user("manager", "苏南区经理", "East Sales", "manager@atlas.local", "13800000001", UserStatus.ACTIVE, passwordEncoder.encode("Manager@123"), Set.of(managerRole));
-            UserAccount employee = user("employee", "林初", "East Sales", "employee@atlas.local", "13800000002", UserStatus.ACTIVE, passwordEncoder.encode("Employee@123"), Set.of(employeeRole));
-            UserAccount employeeTwo = user("employee2", "周航", "North Sales", "employee2@atlas.local", "13800000003", UserStatus.ACTIVE, passwordEncoder.encode("Employee@123"), Set.of(employeeRole));
-            UserAccount employeeThree = user("employee3", "顾屿", "South Sales", "employee3@atlas.local", "13800000004", UserStatus.ACTIVE, passwordEncoder.encode("Employee@123"), Set.of(employeeRole));
+            Department eastSales = departmentRepository.findByName("East Sales").orElseThrow();
+            Department northSales = departmentRepository.findByName("North Sales").orElseThrow();
+            Department southSales = departmentRepository.findByName("South Sales").orElseThrow();
+
+            UserAccount admin = user("admin", "Atlas 管理员", eastSales, "admin@atlas.local", "13800000000", UserStatus.ACTIVE, passwordEncoder.encode("Admin@123"), Set.of(adminRole));
+            UserAccount manager = user("manager", "苏南区经理", eastSales, "manager@atlas.local", "13800000001", UserStatus.ACTIVE, passwordEncoder.encode("Manager@123"), Set.of(managerRole));
+            UserAccount employee = user("employee", "林初", eastSales, "employee@atlas.local", "13800000002", UserStatus.ACTIVE, passwordEncoder.encode("Employee@123"), Set.of(employeeRole));
+            UserAccount employeeTwo = user("employee2", "周航", northSales, "employee2@atlas.local", "13800000003", UserStatus.ACTIVE, passwordEncoder.encode("Employee@123"), Set.of(employeeRole));
+            UserAccount employeeThree = user("employee3", "顾屿", southSales, "employee3@atlas.local", "13800000004", UserStatus.ACTIVE, passwordEncoder.encode("Employee@123"), Set.of(employeeRole));
 
             userRepository.saveAll(List.of(admin, manager, employee, employeeTwo, employeeThree));
 
@@ -165,6 +172,107 @@ public class DataInitializer {
         return repository.save(permission);
     }
 
+    private void migrateUserDepartmentIds(JdbcTemplate jdbcTemplate) {
+        if (!columnExists(jdbcTemplate, "users", "department_id")) {
+            return;
+        }
+
+        if (columnExists(jdbcTemplate, "users", "department")) {
+            jdbcTemplate.update("""
+                INSERT INTO departments (created_at, updated_at, description, name)
+                SELECT NOW(6), NOW(6), CONCAT(source.name, ' team'), source.name
+                FROM (
+                    SELECT DISTINCT TRIM(department) AS name
+                    FROM users
+                    WHERE department IS NOT NULL
+                      AND TRIM(department) <> ''
+                ) source
+                LEFT JOIN departments d ON d.name = source.name
+                WHERE d.id IS NULL
+                """);
+            jdbcTemplate.update("""
+                UPDATE users u
+                JOIN departments d ON d.name = TRIM(u.department)
+                SET u.department_id = d.id
+                WHERE u.department_id IS NULL OR u.department_id = 0
+                """);
+        }
+
+        Integer missingDepartments = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM users WHERE department_id IS NULL OR department_id = 0",
+            Integer.class
+        );
+        if (missingDepartments != null && missingDepartments > 0) {
+            jdbcTemplate.update("""
+                INSERT INTO departments (created_at, updated_at, description, name)
+                SELECT NOW(6), NOW(6), 'Unassigned team', 'Unassigned'
+                WHERE NOT EXISTS (SELECT 1 FROM departments WHERE name = 'Unassigned')
+                """);
+            jdbcTemplate.update("""
+                UPDATE users
+                SET department_id = (SELECT id FROM departments WHERE name = 'Unassigned')
+                WHERE department_id IS NULL OR department_id = 0
+                """);
+        }
+
+        jdbcTemplate.update("ALTER TABLE users MODIFY department_id BIGINT NOT NULL");
+        if (!indexExists(jdbcTemplate, "users", "idx_users_department_id")) {
+            jdbcTemplate.update("ALTER TABLE users ADD KEY idx_users_department_id (department_id)");
+        }
+        if (!foreignKeyExists(jdbcTemplate, "users", "department_id", "departments", "id")) {
+            jdbcTemplate.update("""
+                ALTER TABLE users
+                ADD CONSTRAINT fk_users_department
+                FOREIGN KEY (department_id) REFERENCES departments (id)
+                """);
+        }
+        if (columnExists(jdbcTemplate, "users", "department")) {
+            jdbcTemplate.update("ALTER TABLE users DROP COLUMN department");
+        }
+    }
+
+    private boolean columnExists(JdbcTemplate jdbcTemplate, String tableName, String columnName) {
+        Integer count = jdbcTemplate.queryForObject("""
+            SELECT COUNT(*)
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = ?
+              AND column_name = ?
+            """, Integer.class, tableName, columnName);
+        return count != null && count > 0;
+    }
+
+    private boolean indexExists(JdbcTemplate jdbcTemplate, String tableName, String indexName) {
+        Integer count = jdbcTemplate.queryForObject("""
+            SELECT COUNT(*)
+            FROM information_schema.statistics
+            WHERE table_schema = DATABASE()
+              AND table_name = ?
+              AND index_name = ?
+            """, Integer.class, tableName, indexName);
+        return count != null && count > 0;
+    }
+
+    private boolean foreignKeyExists(
+        JdbcTemplate jdbcTemplate,
+        String tableName,
+        String columnName,
+        String referencedTableName,
+        String referencedColumnName
+    ) {
+        Integer count = jdbcTemplate.queryForObject("""
+            SELECT COUNT(*)
+            FROM information_schema.key_column_usage
+            WHERE table_schema = DATABASE()
+              AND table_name = ?
+              AND column_name = ?
+              AND referenced_table_schema = DATABASE()
+              AND referenced_table_name = ?
+              AND referenced_column_name = ?
+            """, Integer.class, tableName, columnName, referencedTableName, referencedColumnName);
+        return count != null && count > 0;
+    }
+
     private void syncDepartments(
         DepartmentRepository departmentRepository,
         UserRepository userRepository,
@@ -182,12 +290,6 @@ public class DataInitializer {
                 "Channel Partners"
             ));
         }
-        userRepository.findAll().stream()
-            .map(UserAccount::getDepartment)
-            .filter(Objects::nonNull)
-            .map(String::trim)
-            .filter(value -> !value.isEmpty())
-            .forEach(departmentNames::add);
         performanceRecordRepository.findAll().stream()
             .map(PerformanceRecord::getDepartment)
             .filter(Objects::nonNull)
@@ -215,7 +317,7 @@ public class DataInitializer {
     private UserAccount user(
         String username,
         String displayName,
-        String department,
+        Department department,
         String email,
         String phone,
         UserStatus status,
@@ -247,7 +349,7 @@ public class DataInitializer {
     ) {
         PerformanceRecord record = new PerformanceRecord();
         record.setOwner(owner);
-        record.setDepartment(owner.getDepartment());
+        record.setDepartment(owner.getDepartmentName());
         record.setAmount(amount);
         record.setOccurredOn(occurredOn);
         record.setType(type);

@@ -5,6 +5,7 @@ import com.jwtcenter.dto.user.ResetPasswordRequest;
 import com.jwtcenter.dto.user.UpdateUserRequest;
 import com.jwtcenter.dto.user.UpdateUserStatusRequest;
 import com.jwtcenter.dto.user.UserResponse;
+import com.jwtcenter.entity.Department;
 import com.jwtcenter.entity.Role;
 import com.jwtcenter.entity.UserAccount;
 import com.jwtcenter.enums.OperationResult;
@@ -80,15 +81,16 @@ public class UserService {
         if (canManageUsers && !user.getUsername().equals(request.username()) && userRepository.existsByUsername(request.username())) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "USERNAME_EXISTS", "Username already exists.");
         }
+        Department department = null;
         if (canManageUsers) {
-            departmentService.requireExistingDepartment(request.department());
+            department = departmentService.resolveDepartment(request.departmentId(), request.department());
             user.setUsername(request.username());
         }
         user.setDisplayName(request.displayName());
         user.setPhone(request.phone());
         user.setEmail(request.email());
         if (canManageUsers) {
-            user.setDepartment(request.department());
+            user.setDepartment(department);
         }
         UserAccount saved = userRepository.save(user);
         operationLogService.log(actor, "UPDATE_USER", "USER", String.valueOf(userId), OperationResult.SUCCESS, "Updated user profile.");

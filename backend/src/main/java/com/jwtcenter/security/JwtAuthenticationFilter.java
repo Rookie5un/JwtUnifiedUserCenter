@@ -48,7 +48,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         user.getId(),
                         user.getUsername(),
                         user.getDisplayName(),
-                        user.getDepartment(),
+                        user.getDepartmentName(),
                         user.getStatus(),
                         authorities(user)
                     );

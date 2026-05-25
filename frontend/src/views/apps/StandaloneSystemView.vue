@@ -7,6 +7,12 @@ import { roleLabel } from '@/composables/format'
 import { portalApps } from '@/constants/portalApps'
 import { usePortalStore } from '@/stores/portal'
 import type { PortalApp, SsoTicketVerification } from '@/types'
+import ApiDocsView from '@/views/docs/ApiDocsView.vue'
+import LogsView from '@/views/logs/LogsView.vue'
+import ApprovalsView from '@/views/performance/ApprovalsView.vue'
+import RecordsView from '@/views/performance/RecordsView.vue'
+
+type PerformanceModule = 'dashboard' | 'records' | 'approvals' | 'stats' | 'logs' | 'docs'
 
 const route = useRoute()
 const router = useRouter()
@@ -25,6 +31,20 @@ const canViewLogs = computed(() => verification.value?.user.permissions.includes
 const canViewDocs = computed(() =>
   Boolean(verification.value?.user.roles.includes('ADMIN') || verification.value?.user.permissions.includes('DOCS_VIEW')),
 )
+const canViewPerformanceRecords = computed(() =>
+  Boolean(
+    verification.value?.user.permissions.some((permission) =>
+      [
+        'PERFORMANCE_VIEW_SELF',
+        'PERFORMANCE_VIEW_DEPARTMENT',
+        'PERFORMANCE_VIEW_GLOBAL',
+        'PERFORMANCE_CREATE',
+        'PERFORMANCE_EDIT_SELF',
+        'PERFORMANCE_DELETE_SELF',
+      ].includes(permission),
+    ),
+  ),
+)
 const canViewPerformanceApprovals = computed(() =>
   Boolean(
     verification.value?.user.permissions.includes('PERFORMANCE_APPROVE') &&
@@ -33,14 +53,28 @@ const canViewPerformanceApprovals = computed(() =>
 )
 const performanceMenu = computed(() =>
   [
-    { label: '系统工作台', value: '总览', to: null, visible: true },
-    { label: '个人台账', value: '录入与维护', to: { name: 'records' }, visible: true },
-    { label: '审批队列', value: '经理处理', to: { name: 'approvals' }, visible: canViewPerformanceApprovals.value },
-    { label: '统计看板', value: '趋势与排行', to: null, visible: true },
-    { label: '操作日志', value: '审计留痕', to: { name: 'logs' }, visible: canViewLogs.value },
-    { label: '接口文档', value: '联调说明', to: { name: 'docs' }, visible: canViewDocs.value },
+    { module: 'dashboard' as const, label: '系统工作台', value: '总览', visible: true },
+    { module: 'records' as const, label: '个人台账', value: '录入与维护', visible: canViewPerformanceRecords.value },
+    { module: 'approvals' as const, label: '审批队列', value: '经理处理', visible: canViewPerformanceApprovals.value },
+    { module: 'stats' as const, label: '统计看板', value: '趋势与排行', visible: canViewPerformanceRecords.value },
+    { module: 'logs' as const, label: '操作日志', value: '审计留痕', visible: canViewLogs.value },
+    { module: 'docs' as const, label: '接口文档', value: '联调说明', visible: canViewDocs.value },
   ].filter((item) => item.visible),
 )
+const activePerformanceModule = computed<PerformanceModule>(() => {
+  const requested = String(route.query.module ?? 'dashboard')
+  return performanceMenu.value.some((item) => item.module === requested)
+    ? (requested as PerformanceModule)
+    : 'dashboard'
+})
+const activePerformanceMenu = computed(() =>
+  performanceMenu.value.find((item) => item.module === activePerformanceModule.value) ?? performanceMenu.value[0],
+)
+const performanceStats = computed(() => [
+  { title: '月度趋势', value: '实时汇总', detail: '个人、部门和全局统计继续复用统一权限范围。' },
+  { title: '待审批漏斗', value: canViewPerformanceApprovals.value ? '可处理' : '无权限', detail: '审批队列仅对经理和管理员展示。' },
+  { title: '排行分析', value: '按角色开放', detail: '部门排行和全局排行由当前用户的数据权限决定。' },
+])
 
 const modules = computed(() => {
   if (appKey.value === 'oa') {
@@ -107,6 +141,14 @@ async function verifyTicket() {
   }
 }
 
+function performanceModuleRoute(module: PerformanceModule) {
+  return {
+    name: 'standalone-system',
+    params: { appKey: 'performance' },
+    query: { ...route.query, module },
+  }
+}
+
 onMounted(verifyTicket)
 </script>
 
@@ -163,8 +205,8 @@ onMounted(verifyTicket)
               v-for="item in performanceMenu"
               :key="item.label"
               class="system-menu-item"
-              :class="{ muted: !item.to }"
-              :to="item.to ?? route.fullPath"
+              :class="{ active: activePerformanceModule === item.module }"
+              :to="performanceModuleRoute(item.module)"
             >
               <span>{{ item.label }}</span>
               <small>{{ item.value }}</small>
@@ -172,17 +214,48 @@ onMounted(verifyTicket)
           </nav>
         </aside>
 
-        <div class="module-grid in-system">
-          <article
-            v-for="(item, index) in modules"
-            :key="item.title"
-            class="module-card"
-            :style="{ animationDelay: `${130 + index * 70}ms` }"
-          >
-            <span>{{ item.title }}</span>
-            <strong>{{ item.value }}</strong>
-            <p>{{ item.detail }}</p>
-          </article>
+        <div class="system-content">
+          <div class="system-content-head surface">
+            <div>
+              <span class="eyebrow">Performance System</span>
+              <h2>{{ activePerformanceMenu?.label ?? '系统工作台' }}</h2>
+            </div>
+            <strong>免密会话有效</strong>
+          </div>
+
+          <div v-if="activePerformanceModule === 'dashboard'" class="module-grid in-system">
+            <article
+              v-for="(item, index) in modules"
+              :key="item.title"
+              class="module-card"
+              :style="{ animationDelay: `${130 + index * 70}ms` }"
+            >
+              <span>{{ item.title }}</span>
+              <strong>{{ item.value }}</strong>
+              <p>{{ item.detail }}</p>
+            </article>
+          </div>
+
+          <RecordsView v-else-if="activePerformanceModule === 'records'" />
+          <ApprovalsView v-else-if="activePerformanceModule === 'approvals'" />
+
+          <section v-else-if="activePerformanceModule === 'stats'" class="performance-panel surface">
+            <div>
+              <span class="eyebrow">Statistics</span>
+              <h3>统计看板</h3>
+              <p class="muted">这里模拟业绩审批系统内的统计模块，实际数据权限仍按当前登录用户控制。</p>
+            </div>
+            <div class="module-grid stats-grid">
+              <article v-for="item in performanceStats" :key="item.title" class="module-card">
+                <span>{{ item.title }}</span>
+                <strong>{{ item.value }}</strong>
+                <p>{{ item.detail }}</p>
+              </article>
+            </div>
+          </section>
+
+          <LogsView v-else-if="activePerformanceModule === 'logs'" />
+          <ApiDocsView v-else-if="activePerformanceModule === 'docs'" />
         </div>
       </section>
 
@@ -199,32 +272,8 @@ onMounted(verifyTicket)
         </article>
       </section>
 
-      <section v-if="appKey === 'performance'" class="deep-links surface fade-rise" style="animation-delay: 280ms">
-        <div>
-          <span class="eyebrow">Real Business Demo</span>
-          <h2>业务审批工作区</h2>
-          <p class="muted">以下入口继续复用当前浏览器登录态，日志和接口文档也从这里进入。</p>
-        </div>
-        <div class="deep-actions">
-          <RouterLink class="button button-primary" :to="{ name: 'records' }">个人业绩台账</RouterLink>
-          <RouterLink
-            v-if="canViewPerformanceApprovals"
-            class="button button-secondary"
-            :to="{ name: 'approvals' }"
-          >
-            部门审批队列
-          </RouterLink>
-          <RouterLink v-if="canViewLogs" class="button button-secondary" :to="{ name: 'logs' }">
-            操作日志
-          </RouterLink>
-          <RouterLink v-if="canViewDocs" class="button button-secondary" :to="{ name: 'docs' }">
-            接口文档
-          </RouterLink>
-        </div>
-      </section>
-
       <section
-        v-else-if="appKey === 'permission'"
+        v-if="appKey === 'permission'"
         class="deep-links surface fade-rise"
         style="animation-delay: 280ms"
       >
@@ -402,6 +451,12 @@ onMounted(verifyTicket)
   background: color-mix(in srgb, var(--app-accent) 8%, white);
 }
 
+.system-menu-item.active {
+  border-color: color-mix(in srgb, var(--app-accent) 50%, transparent);
+  background: color-mix(in srgb, var(--app-accent) 12%, white);
+  box-shadow: inset 3px 0 0 var(--app-accent);
+}
+
 .system-menu-item span,
 .system-menu-item small {
   display: block;
@@ -411,11 +466,57 @@ onMounted(verifyTicket)
   color: var(--ink-soft);
 }
 
-.system-menu-item.muted {
-  cursor: default;
+.module-grid.in-system {
+  width: auto;
+  margin: 0;
 }
 
-.module-grid.in-system {
+.system-content {
+  min-width: 0;
+  display: grid;
+  gap: 1rem;
+}
+
+.system-content-head {
+  border-radius: 18px;
+  padding: 1rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+}
+
+.system-content-head h2 {
+  margin: 0.35rem 0 0;
+  font-size: 1.45rem;
+  letter-spacing: -0.04em;
+}
+
+.system-content-head strong {
+  padding: 0.52rem 0.72rem;
+  border-radius: 999px;
+  color: var(--app-accent);
+  background: color-mix(in srgb, var(--app-accent) 10%, white);
+  white-space: nowrap;
+}
+
+.performance-panel {
+  border-radius: 18px;
+  padding: 1.2rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.performance-panel h3 {
+  margin: 0.35rem 0 0;
+  font-size: 1.45rem;
+}
+
+.performance-panel p {
+  margin-bottom: 0;
+}
+
+.stats-grid {
   width: auto;
   margin: 0;
 }

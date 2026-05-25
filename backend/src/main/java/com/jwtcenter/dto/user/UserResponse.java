@@ -11,6 +11,7 @@ public record UserResponse(
     String displayName,
     String phone,
     String email,
+    Long departmentId,
     String department,
     UserStatus status,
     List<String> roles,

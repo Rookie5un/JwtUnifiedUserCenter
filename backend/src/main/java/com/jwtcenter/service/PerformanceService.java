@@ -63,7 +63,7 @@ public class PerformanceService {
         accessService.requirePermission(actor, PermissionCodes.PERFORMANCE_CREATE);
         PerformanceRecord record = new PerformanceRecord();
         record.setOwner(actor);
-        record.setDepartment(actor.getDepartment());
+        record.setDepartment(actor.getDepartmentName());
         apply(record, request);
         PerformanceRecord saved = performanceRecordRepository.save(record);
         operationLogService.log(actor, "CREATE_PERFORMANCE", "PERFORMANCE_RECORD", String.valueOf(saved.getId()), OperationResult.SUCCESS, "Performance record submitted.");
@@ -116,7 +116,7 @@ public class PerformanceService {
         List<PerformanceRecord> records = canViewGlobal(actor)
             ? performanceRecordRepository.findByStatusOrderByCreatedAtAsc(PerformanceStatus.PENDING)
             : canViewDepartment(actor)
-                ? performanceRecordRepository.findByDepartmentAndStatusOrderByCreatedAtAsc(actor.getDepartment(), PerformanceStatus.PENDING)
+                ? performanceRecordRepository.findByDepartmentAndStatusOrderByCreatedAtAsc(actor.getDepartmentName(), PerformanceStatus.PENDING)
                 : forbidden("Department or global performance visibility is required for approvals.");
         return records.stream().map(MapperUtils::toPerformanceRecordResponse).toList();
     }
@@ -170,7 +170,7 @@ public class PerformanceService {
         UserAccount actor = accessService.currentUser();
         requirePerformanceAccess(actor);
         accessService.requireAnyPermission(actor, PermissionCodes.PERFORMANCE_VIEW_DEPARTMENT, PermissionCodes.PERFORMANCE_VIEW_GLOBAL);
-        return dashboard("department", performanceRecordRepository.findByDepartmentOrderByOccurredOnDescCreatedAtDesc(actor.getDepartment()));
+        return dashboard("department", performanceRecordRepository.findByDepartmentOrderByOccurredOnDescCreatedAtDesc(actor.getDepartmentName()));
     }
 
     @Transactional(readOnly = true)
@@ -212,7 +212,7 @@ public class PerformanceService {
         if (record.getStatus() != PerformanceStatus.PENDING) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_STATUS", "Only pending records can be reviewed.");
         }
-        if (!canViewGlobal(actor) && (!canViewDepartment(actor) || !actor.getDepartment().equals(record.getDepartment()))) {
+        if (!canViewGlobal(actor) && (!canViewDepartment(actor) || !actor.getDepartmentName().equals(record.getDepartment()))) {
             throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "You can only review records from your department.");
         }
         return record;
@@ -232,7 +232,7 @@ public class PerformanceService {
             return performanceRecordRepository.findAllByOrderByOccurredOnDescCreatedAtDesc();
         }
         if (canViewDepartment(actor)) {
-            return performanceRecordRepository.findByDepartmentOrderByOccurredOnDescCreatedAtDesc(actor.getDepartment());
+            return performanceRecordRepository.findByDepartmentOrderByOccurredOnDescCreatedAtDesc(actor.getDepartmentName());
         }
         if (accessService.hasPermission(actor, PermissionCodes.PERFORMANCE_VIEW_SELF)) {
             return performanceRecordRepository.findByOwner_IdOrderByOccurredOnDescCreatedAtDesc(actor.getId());
@@ -246,7 +246,7 @@ public class PerformanceService {
         return switch (scope == null ? "personal" : scope) {
             case "department" -> {
                 accessService.requireAnyPermission(actor, PermissionCodes.PERFORMANCE_VIEW_DEPARTMENT, PermissionCodes.PERFORMANCE_VIEW_GLOBAL);
-                yield performanceRecordRepository.findByDepartmentOrderByOccurredOnDescCreatedAtDesc(actor.getDepartment());
+                yield performanceRecordRepository.findByDepartmentOrderByOccurredOnDescCreatedAtDesc(actor.getDepartmentName());
             }
             case "global" -> {
                 accessService.requirePermission(actor, PermissionCodes.PERFORMANCE_VIEW_GLOBAL);
